@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <title>O.S.</title>
+</head>
+<body class="bg-slate-100 min-h-screen">
+    <header class="bg-slate-900 p-4 text-white shadow-lg">
+        <div class="max-w-5xl mx-auto flex items-center justify-between gap-4">
+            <a href="javascript:history.back()" class="text-yellow-400 font-bold text-sm">← VOLTAR</a>
+            <div class="text-right text-sm">
+                <div class="font-bold">{{ current_user.nome }}</div>
+                <div class="text-slate-300">{{ current_user.perfil }}</div>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-5xl mx-auto p-4 space-y-4">
+        <section class="bg-white rounded-3xl p-5 shadow-sm border border-slate-200">
+            <h1 class="text-xl font-black text-slate-800">Ordem de Servico</h1>
+            <p class="text-sm text-slate-500 mt-1">Chassi {{ ordem_servico.chassi }} | Arquivo {{ ordem_servico.nome_arquivo }}</p>
+        </section>
+
+        {% if preview.available %}
+        {% for paragraph in preview.paragraphs %}
+        <section class="bg-white rounded-3xl p-5 shadow-sm border border-slate-200">
+            <p class="text-sm text-slate-700 whitespace-pre-wrap">{{ paragraph }}</p>
+        </section>
+        {% endfor %}
+
+        {% for table in preview.tables %}
+        <section class="bg-white rounded-3xl p-5 shadow-sm border border-slate-200 overflow-x-auto">
+            <table class="min-w-full text-sm">
+                <tbody>
+                    {% for row in table %}
+                    <tr class="border-b border-slate-100">
+                        {% for cell in row %}
+                        <td class="px-3 py-2 align-top text-slate-700">{{ cell }}</td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </section>
+        {% endfor %}
+        {% else %}
+        <section class="bg-white rounded-3xl p-5 shadow-sm border border-slate-200">
+            <p class="text-slate-500">A pré-visualização da O.S. não está disponível neste ambiente.</p>
+        </section>
+        {% endif %}
+    </main>
+</body>
+</html>

@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <title>Exportações</title>
+</head>
+<body class="bg-slate-100 min-h-screen">
+    <header class="bg-slate-900 p-4 text-white shadow-lg">
+        <div class="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+            <div>
+                <a href="/" class="text-yellow-400 font-bold text-sm">← VOLTAR</a>
+                <h1 class="text-xl font-black mt-1">Exportações do ADM</h1>
+            </div>
+            <div class="text-right text-sm">
+                <div class="font-bold">{{ current_user.nome }}</div>
+                <div class="text-slate-300">{{ current_user.perfil }}</div>
+                <a href="/logout" class="inline-block mt-2 text-xs uppercase font-bold text-slate-300">Sair</a>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-6xl mx-auto p-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <a href="/exportar_veiculos" class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 hover:shadow-md transition">
+            <div class="text-xs font-bold uppercase text-slate-400 mb-2">Base</div>
+            <div class="text-lg font-black text-slate-800">Exportar Veículos</div>
+        </a>
+        <a href="/exportar_historico" class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 hover:shadow-md transition">
+            <div class="text-xs font-bold uppercase text-slate-400 mb-2">Logs</div>
+            <div class="text-lg font-black text-slate-800">Exportar Histórico</div>
+        </a>
+        <a href="/exportar_tempos" class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 hover:shadow-md transition">
+            <div class="text-xs font-bold uppercase text-slate-400 mb-2">Tempos</div>
+            <div class="text-lg font-black text-slate-800">Exportar Tempos</div>
+        </a>
+        <a href="/exportar_sequenciamento" class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 hover:shadow-md transition">
+            <div class="text-xs font-bold uppercase text-slate-400 mb-2">Postos</div>
+            <div class="text-lg font-black text-slate-800">Exportar Sequenciamento</div>
+        </a>
+        <a href="/exportar_bom_preparacao" class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 hover:shadow-md transition">
+            <div class="text-xs font-bold uppercase text-slate-400 mb-2">B.O.M.</div>
+            <div class="text-lg font-black text-slate-800">Exportar B.O.M. Preparação</div>
+        </a>
+        <a href="/exportar_bom_expedicao" class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 hover:shadow-md transition">
+            <div class="text-xs font-bold uppercase text-slate-400 mb-2">B.O.M.</div>
+            <div class="text-lg font-black text-slate-800">Exportar B.O.M. Expedição Consolidada</div>
+        </a>
+        <a href="/exportar_empenhos" class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 hover:shadow-md transition">
+            <div class="text-xs font-bold uppercase text-slate-400 mb-2">Expedição</div>
+            <div class="text-lg font-black text-slate-800">Exportar Lancamentos de Empenho</div>
+        </a>
+        <a href="/exportar_ordens_servico" class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 hover:shadow-md transition">
+            <div class="text-xs font-bold uppercase text-slate-400 mb-2">Documentos</div>
+            <div class="text-lg font-black text-slate-800">Exportar Ordens de Serviço</div>
+        </a>
+    </main>
+</body>
+</html>

@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <title>Selecao de Posto</title>
+</head>
+<body class="bg-slate-100 min-h-screen">
+    <header class="bg-slate-900 p-4 text-white shadow-lg">
+        <div class="max-w-5xl mx-auto flex items-center justify-between gap-4">
+            <div>
+                <h1 class="text-xl font-black">Operacao por Posto</h1>
+                <p class="text-sm text-slate-300">Qual posto de trabalho gostaria de selecionar?</p>
+            </div>
+            <div class="text-right text-sm">
+                <div class="font-bold">{{ current_user.nome }}</div>
+                <div class="text-slate-300">{{ current_user.perfil }}</div>
+                <a href="/logout" class="inline-block mt-2 text-xs uppercase font-bold text-slate-300">Sair</a>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-5xl mx-auto p-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {% for posto in postos %}
+            <a href="/postos/{{ posto.key }}" class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:-translate-y-0.5 transition">
+                <div class="text-[11px] font-bold uppercase tracking-wide text-slate-400 mb-2">Selecione</div>
+                <h2 class="text-lg font-black text-slate-800">{{ posto.label }}</h2>
+                <p class="text-sm text-slate-500 mt-3">Abrir fila de cards deste posto.</p>
+            </a>
+            {% endfor %}
+        </div>
+    </main>
+</body>
+</html>

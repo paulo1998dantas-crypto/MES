@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <title>{{ posto.label }}</title>
+</head>
+<body class="bg-slate-50 min-h-screen">
+    <header class="bg-slate-900 p-4 text-white shadow-lg">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+            <div>
+                <a href="/postos" class="text-yellow-400 font-bold text-sm">← VOLTAR</a>
+                <h1 class="text-xl font-black mt-1">{{ posto.label }}</h1>
+            </div>
+            <div class="text-right text-sm">
+                <div class="font-bold">{{ current_user.nome }}</div>
+                <div class="text-slate-300">{{ current_user.perfil }}</div>
+                <a href="/logout" class="inline-block mt-2 text-xs uppercase font-bold text-slate-300">Sair</a>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto p-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {% for card in cards %}
+            <a href="/postos/{{ card.posto }}/{{ card.veiculo.chassi }}" class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-md transition group">
+                <div class="p-5">
+                    <div class="flex justify-between items-start mb-3 gap-2">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center font-black text-base shadow">
+                                {{ card.sequencia }}
+                            </div>
+                            <div>
+                                <h2 class="font-bold text-slate-800 leading-tight uppercase">{{ card.veiculo.modelo }}</h2>
+                                <p class="text-[10px] text-slate-400 font-semibold uppercase">Sequencia do posto</p>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <span class="text-[10px] bg-slate-100 px-2 py-1 rounded font-mono text-slate-500">{{ card.veiculo.chassi }}</span>
+                            <div class="text-[10px] text-slate-500 mt-1">Loc.: {{ card.veiculo.localizacao or "-" }}</div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 gap-1 mb-4 text-[11px] text-slate-600">
+                        <div><span class="font-semibold text-slate-500">Ar condicionado:</span> {{ card.veiculo.ar_condicionado or "-" }}</div>
+                        <div><span class="font-semibold text-slate-500">CJ. BCO:</span> {{ card.veiculo.cj_bco or "-" }}</div>
+                        <div><span class="font-semibold text-slate-500">Cliente:</span> {{ card.veiculo.cliente or "-" }}</div>
+                        <div><span class="font-semibold text-slate-500">Destino:</span> {{ card.veiculo.destino or "-" }}</div>
+                    </div>
+
+                    <div class="mb-4">
+                        <p class="text-xs text-slate-400 uppercase font-bold mb-1 tracking-wider">Status Operacional</p>
+                        <p class="text-sm font-bold text-blue-600">{{ card.status_operacao }}</p>
+                    </div>
+
+                    {% if card.tem_ordem_servico %}
+                    <div class="text-[11px] font-bold text-emerald-600">O.S. anexada ao card</div>
+                    {% endif %}
+                </div>
+
+                <div class="block w-full bg-slate-50 border-t border-slate-100 p-3 text-center text-sm font-bold text-slate-600 group-hover:bg-blue-600 group-hover:text-white transition">
+                    ABRIR CARD
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+
+        {% if cards|length == 0 %}
+        <div class="text-center py-20 bg-white rounded-3xl border-2 border-dashed border-slate-200 mt-6">
+            <p class="text-slate-400 font-medium">Nenhum card sequenciado neste posto.</p>
+        </div>
+        {% endif %}
+    </main>
+    <script src="/static/auto_refresh.js"></script>
+    <script>
+    setupAutoRefresh({ intervalMs: 10000, pauseOnFocus: false, pauseOnFileSelection: false });
+    </script>
+</body>
+</html>
