@@ -24,6 +24,19 @@
                 <a href="/sequenciamento" class="bg-cyan-500 px-4 py-2 rounded text-sm font-bold hover:bg-cyan-400 transition text-slate-900">Sequenciamento</a>
                 <a href="/exportacoes" class="bg-emerald-500 px-4 py-2 rounded text-sm font-bold hover:bg-emerald-400 transition text-slate-900">Exportações</a>
                 <a href="/importar" class="bg-blue-600 px-4 py-2 rounded text-sm font-bold hover:bg-blue-700 transition">Importar</a>
+                <a href="/importar#vehicleForm" class="bg-sky-600 px-4 py-2 rounded text-sm font-bold hover:bg-sky-700 transition">Cadastro Veiculo</a>
+                <button id="gerar-base-teste-btn" type="button" onclick="gerarBaseTeste()"
+                        class="bg-orange-600 px-4 py-2 rounded text-sm font-bold hover:bg-orange-700 transition">
+                    Base Teste
+                </button>
+                <button id="resetar-os-btn" type="button" onclick="resetarOrdensServico()"
+                        class="bg-rose-700 px-4 py-2 rounded text-sm font-bold hover:bg-rose-800 transition">
+                    Resetar O.S.
+                </button>
+                <button id="resetar-empenho-obsoleto-btn" type="button" onclick="resetarEmpenhoObsoleto()"
+                        class="bg-red-800 px-4 py-2 rounded text-sm font-bold hover:bg-red-900 transition">
+                    Resetar Empenho Obsoleto
+                </button>
                 <a href="/exportar_historico" class="bg-emerald-600 px-4 py-2 rounded text-sm font-bold hover:bg-emerald-700 transition">Exportar Logs</a>
                 <a href="/exportar_tempos" class="bg-indigo-600 px-4 py-2 rounded text-sm font-bold hover:bg-indigo-700 transition">Exportar Tempos</a>
                 <a href="/limpar_historico" onclick="return confirm('Apagar todos os logs permanentemente?')"
@@ -148,6 +161,93 @@ async function salvarBanco(el) {
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(payload)
     });
+}
+
+async function gerarBaseTeste() {
+    const confirmar = confirm('Gerar uma base de teste agora? Isso vai substituir a base ativa atual.');
+    if (!confirmar) {
+        return;
+    }
+
+    const btn = document.getElementById('gerar-base-teste-btn');
+    const textoOriginal = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Gerando...';
+
+    try {
+        const response = await fetch('/gerar_base_teste', { method: 'POST' });
+        const data = await response.json();
+
+        if (!response.ok || data.status !== 'sucesso') {
+            throw new Error(data.detail || 'Nao foi possivel gerar a base de teste.');
+        }
+
+        alert(data.detail);
+        window.location.reload();
+    } catch (err) {
+        alert(err.message || 'Erro ao gerar base de teste.');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = textoOriginal;
+    }
+}
+
+async function resetarOrdensServico() {
+    const confirmar = confirm('Resetar todas as ordens de servico agora? Isso apaga os registros e os arquivos enviados.');
+    if (!confirmar) {
+        return;
+    }
+
+    const btn = document.getElementById('resetar-os-btn');
+    const textoOriginal = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Resetando...';
+
+    try {
+        const response = await fetch('/resetar_ordens_servico', { method: 'POST' });
+        const data = await response.json();
+
+        if (!response.ok || data.status !== 'sucesso') {
+            throw new Error(data.detail || 'Nao foi possivel resetar as ordens de servico.');
+        }
+
+        alert(data.detail);
+        window.location.reload();
+    } catch (err) {
+        alert(err.message || 'Erro ao resetar ordens de servico.');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = textoOriginal;
+    }
+}
+
+async function resetarEmpenhoObsoleto() {
+    const confirmar = confirm('Resetar os empenhos obsoletos agora? Isso apaga os empenhos de chassis que nao estao na base ativa atual.');
+    if (!confirmar) {
+        return;
+    }
+
+    const btn = document.getElementById('resetar-empenho-obsoleto-btn');
+    const textoOriginal = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Resetando...';
+
+    try {
+        const response = await fetch('/resetar_empenho_obsoleto', { method: 'POST' });
+        const data = await response.json();
+
+        if (!response.ok || data.status !== 'sucesso') {
+            throw new Error(data.detail || 'Nao foi possivel resetar os empenhos obsoletos.');
+        }
+
+        alert(data.detail);
+        window.location.reload();
+    } catch (err) {
+        alert(err.message || 'Erro ao resetar empenhos obsoletos.');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = textoOriginal;
+    }
 }
 
 setupAutoRefresh({ intervalMs: 12000 });

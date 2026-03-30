@@ -22,7 +22,7 @@
             <a href="/logout" class="text-slate-300 font-bold text-xs uppercase">Sair</a>
         </div>
     </header>
-    <main class="p-6 max-w-md mx-auto">
+    <main class="p-6 max-w-6xl mx-auto">
         <div class="bg-white p-8 rounded-3xl shadow-xl text-center space-y-8">
             <a href="/static/modelo_upload.xlsx" class="inline-block mb-2 text-sm font-bold text-blue-700 hover:text-blue-900 underline">
                 Baixar modelo de planilha (Base)
@@ -47,6 +47,39 @@
                 </form>
             </div>
             <p id="msg" class="mt-4 font-bold text-sm"></p>
+        </div>
+        <div class="bg-white p-8 rounded-3xl shadow-xl mt-6 space-y-6 max-w-4xl mx-auto">
+            <div>
+                <h2 class="text-lg font-black text-slate-800 uppercase">Cadastro Manual de Veiculo</h2>
+                <p class="text-sm text-slate-500 mt-1">Use este formulario para incluir ou atualizar um chassi diretamente pela interface do ADM.</p>
+            </div>
+
+            <form id="vehicleForm" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <input type="text" name="chassi" placeholder="Chassi" class="border border-slate-300 p-3 rounded-xl" required>
+                <input type="text" name="modelo" placeholder="Modelo" class="border border-slate-300 p-3 rounded-xl" required>
+                <input type="number" name="ordem" placeholder="Ordem (opcional)" min="1" class="border border-slate-300 p-3 rounded-xl">
+                <input type="text" name="ar_condicionado" placeholder="Ar condicionado (GE/CLIM)" class="border border-slate-300 p-3 rounded-xl">
+                <input type="text" name="cj_bco" placeholder="CJ. BCO" class="border border-slate-300 p-3 rounded-xl">
+                <input type="text" name="cliente" placeholder="Cliente" class="border border-slate-300 p-3 rounded-xl">
+                <input type="text" name="destino" placeholder="Destino" class="border border-slate-300 p-3 rounded-xl">
+                <select name="localizacao" class="border border-slate-300 p-3 rounded-xl bg-white">
+                    <option value="">Localizacao</option>
+                    {% for localizacao in localizacoes %}
+                    <option value="{{ localizacao }}">{{ localizacao }}</option>
+                    {% endfor %}
+                </select>
+                <select name="banco_presente" class="border border-slate-300 p-3 rounded-xl bg-white">
+                    <option value="">Banco?</option>
+                    <option value="SIM">SIM</option>
+                    <option value="NAO">NAO</option>
+                </select>
+                <input type="text" name="banco_comentario" placeholder="Comentario banco" class="border border-slate-300 p-3 rounded-xl">
+                <div class="md:col-span-2">
+                    <button type="submit" class="w-full py-3 bg-amber-600 text-white rounded-2xl font-bold">SALVAR VEICULO</button>
+                </div>
+            </form>
+
+            <p id="vehicleMsg" class="font-bold text-sm"></p>
         </div>
     </main>
     <script>
@@ -99,6 +132,26 @@
                 }
             } catch (err) {
                 document.getElementById('msg').textContent = "Erro na requisição: " + err.message;
+            }
+        };
+        document.getElementById('vehicleForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const form = e.currentTarget;
+            const msg = document.getElementById('vehicleMsg');
+            const data = new FormData(form);
+
+            try {
+                const response = await fetch('/cadastros/veiculos', { method: 'POST', body: data });
+                const payload = await response.json();
+                if (response.ok && payload.status === 'sucesso') {
+                    msg.textContent = payload.detail;
+                    form.reset();
+                    setTimeout(() => { window.location.href = "/"; }, 1200);
+                } else {
+                    msg.textContent = payload.detail || "Erro ao salvar veiculo";
+                }
+            } catch (err) {
+                msg.textContent = "Erro na requisiÃ§Ã£o: " + err.message;
             }
         };
     </script>

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Float
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Float, Boolean
 from database import Base
 import datetime
 from zoneinfo import ZoneInfo
@@ -10,6 +10,7 @@ class Veiculo(Base):
     chassi = Column(String, primary_key=True, index=True)
     modelo = Column(String)
     ordem = Column(Integer)
+    ativo = Column(Boolean, nullable=False, default=True)
     ar_condicionado = Column(String)
     cj_bco = Column(String)
     cliente = Column(String)
@@ -67,7 +68,7 @@ class PostoSequencia(Base):
 class OrdemServico(Base):
     __tablename__ = "ordens_servico"
     id = Column(Integer, primary_key=True, index=True)
-    chassi = Column(String, ForeignKey("veiculos.chassi"), unique=True, index=True, nullable=False)
+    chassi = Column(String, unique=True, index=True, nullable=False)
     nome_arquivo = Column(String, nullable=False)
     caminho_arquivo = Column(String, nullable=False)
     criado_em = Column(DateTime(timezone=True), default=lambda: datetime.datetime.now(LOCAL_TZ))

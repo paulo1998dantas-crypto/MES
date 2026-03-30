@@ -3,6 +3,7 @@ import pandas as pd
 import io
 import hashlib
 import hmac
+import random
 import re
 import secrets
 import unicodedata
@@ -42,6 +43,7 @@ def ensure_columns():
     insp = inspect(database.engine)
     dialect = database.engine.dialect.name
     ts_tz = "TIMESTAMP WITH TIME ZONE" if dialect == "postgresql" else "DATETIME"
+    bool_true = "BOOLEAN DEFAULT TRUE" if dialect == "postgresql" else "BOOLEAN DEFAULT 1"
 
     def column_names(table):
         if not insp.has_table(table):
@@ -56,12 +58,14 @@ def ensure_columns():
     with database.engine.begin() as conn:
         add_column_if_missing(conn, "veiculos", "ar_condicionado", "VARCHAR")
         add_column_if_missing(conn, "veiculos", "ordem", "INTEGER")
+        add_column_if_missing(conn, "veiculos", "ativo", bool_true)
         add_column_if_missing(conn, "veiculos", "cj_bco", "VARCHAR")
         add_column_if_missing(conn, "veiculos", "cliente", "VARCHAR")
         add_column_if_missing(conn, "veiculos", "destino", "VARCHAR")
         add_column_if_missing(conn, "veiculos", "localizacao", "VARCHAR")
         add_column_if_missing(conn, "veiculos", "banco_presente", "VARCHAR")
         add_column_if_missing(conn, "veiculos", "banco_comentario", "VARCHAR")
+        conn.execute(text("UPDATE veiculos SET ativo = 1 WHERE ativo IS NULL"))
 
         add_column_if_missing(conn, "apontamentos", "responsavel", "VARCHAR")
         add_column_if_missing(conn, "apontamentos", "inicio", ts_tz)
@@ -288,6 +292,35 @@ def can_export_expedicao_lancamentos(request: Request) -> bool:
     return perfil in {"ADM", "EXPEDICAO"}
 
 
+def active_vehicle_filter():
+    return models.Veiculo.ativo.is_(True)
+
+
+def active_vehicle_query(db: Session):
+    return db.query(models.Veiculo).filter(active_vehicle_filter())
+
+
+def get_vehicle_by_chassi(db: Session, chassi: str, active_only: bool = True):
+    query = db.query(models.Veiculo).filter(
+        func.trim(cast(models.Veiculo.chassi, String)) == str(chassi).strip()
+    )
+    if active_only:
+        query = query.filter(active_vehicle_filter())
+    return query.first()
+
+
+def get_active_chassis(db: Session):
+    return [
+        str(chassi).strip()
+        for (chassi,) in active_vehicle_query(db).with_entities(models.Veiculo.chassi).all()
+    ]
+
+
+def get_next_vehicle_order(db: Session) -> int:
+    maior_ordem = active_vehicle_query(db).with_entities(func.max(models.Veiculo.ordem)).scalar()
+    return int(maior_ordem or 0) + 1
+
+
 def is_management_profile(perfil: str) -> bool:
     return str(perfil or "").upper() in MANAGEMENT_PROFILES
 
@@ -461,9 +494,7 @@ def get_posto_cards(db: Session, posto: str):
 
     cards = []
     for item in sequencias:
-        veiculo = db.query(models.Veiculo).filter(
-            func.trim(cast(models.Veiculo.chassi, String)) == str(item.chassi).strip()
-        ).first()
+        veiculo = get_vehicle_by_chassi(db, item.chassi)
         if not veiculo:
             continue
         apont = get_apontamento_for_stage(db, veiculo.chassi, posto_cfg["etapa"])
@@ -637,9 +668,7 @@ def sync_stage_from_bom(db: Session, tipo: str, chassi: str, responsavel: str):
     if not posto_cfg:
         return None
 
-    veiculo = db.query(models.Veiculo).filter(
-        func.trim(cast(models.Veiculo.chassi, String)) == str(chassi).strip()
-    ).first()
+    veiculo = get_vehicle_by_chassi(db, chassi)
     if not veiculo:
         return None
 
@@ -782,8 +811,13 @@ def build_bom_item_empenho_summary(bom_items, empenhos_por_item):
 
 
 def build_expedicao_export_rows(db: Session):
+    active_chassis = get_active_chassis(db)
+    if not active_chassis:
+        return []
+
     itens = db.query(models.BomItem).filter(
-        models.BomItem.tipo == "EXPEDICAO"
+        models.BomItem.tipo == "EXPEDICAO",
+        models.BomItem.chassi.in_(active_chassis),
     ).order_by(models.BomItem.chassi.asc(), models.BomItem.id.asc()).all()
     ordens_por_chassi = {
         ordem.chassi: ordem
@@ -1011,7 +1045,7 @@ def get_apontamentos_by_chassi(db: Session, veiculos_db):
 
 
 def generate_automatic_sequences(db: Session):
-    veiculos_db = db.query(models.Veiculo).order_by(models.Veiculo.ordem.asc()).all()
+    veiculos_db = active_vehicle_query(db).order_by(models.Veiculo.ordem.asc()).all()
     apont_por_chassi = get_apontamentos_by_chassi(db, veiculos_db)
 
     db.query(models.PostoSequencia).delete()
@@ -1042,13 +1076,433 @@ def generate_automatic_sequences(db: Session):
                 )
             )
 
+
+DEMO_MODELOS = [
+    "TORINO",
+    "APACHE VIP",
+    "ATTIVI",
+    "MILLENNIUM",
+    "VIALE",
+    "IDEALE",
+]
+
+DEMO_CLIENTES = [
+    "VIACAO ALPHA",
+    "TRANS BETA",
+    "URBANO SUL",
+    "EXPRESSO NORTE",
+    "MOBILIDADE OESTE",
+]
+
+DEMO_DESTINOS = [
+    "SAO PAULO",
+    "CURITIBA",
+    "CAMPINAS",
+    "SOROCABA",
+    "RIBEIRAO PRETO",
+]
+
+DEMO_BANCO_COMENTARIOS = [
+    "MDBUS",
+    "INCORPOL",
+    "AJUSTE FINAL",
+    "LIBERADO",
+    "AGUARDANDO KIT",
+]
+
+DEMO_RESPONSAVEIS = [
+    "Carlos",
+    "Marina",
+    "Felipe",
+    "Julia",
+    "Renato",
+    "Patricia",
+]
+
+DEMO_BOM_DESCRICOES = [
+    ("1001", "PARAFUSO", "Parafuso de fixacao"),
+    ("1002", "SUPORTE", "Suporte lateral"),
+    ("1003", "CHICOTE", "Chicote eletrico"),
+    ("1004", "ACABAMENTO", "Acabamento interno"),
+    ("1005", "KIT PORTA", "Kit de porta"),
+    ("1006", "LUMINARIA", "Luminaria interna"),
+]
+
+
+def reset_ordens_servico(db: Session) -> int:
+    ordens_servico = db.query(models.OrdemServico).all()
+    for ordem_servico in ordens_servico:
+        remove_ordem_servico_arquivo(ordem_servico)
+    removidas = len(ordens_servico)
+    db.query(models.OrdemServico).delete()
+    db.flush()
+    return removidas
+
+
+def clear_active_base(db: Session, preserve_ordens_servico: bool = False):
+    db.query(models.Empenho).delete()
+    db.query(models.BomItem).delete()
+    if not preserve_ordens_servico:
+        reset_ordens_servico(db)
+    db.query(models.PostoSequencia).delete()
+    db.query(models.Apontamento).delete()
+    db.query(models.Veiculo).delete()
+    db.flush()
+
+
+def prepare_base_import(db: Session):
+    db.query(models.PostoSequencia).delete()
+    db.query(models.Veiculo).update(
+        {"ativo": False},
+        synchronize_session=False,
+    )
+    db.flush()
+
+
+def get_latest_bom_responsavel(db: Session, tipo: str, chassi: str) -> str:
+    item = db.query(models.BomItem).filter(
+        models.BomItem.tipo == str(tipo).strip().upper(),
+        func.trim(cast(models.BomItem.chassi, String)) == str(chassi).strip(),
+    ).order_by(models.BomItem.atualizado_em.desc(), models.BomItem.id.desc()).first()
+    return safe_str(item.responsavel if item else "") or "Sistema"
+
+
+def build_manual_vehicle_stage_statuses(banco_presente: str) -> dict:
+    status_map = {etapa: "NAO" for etapa in ETAPAS_PRODUCAO}
+    banco_flag = safe_str(banco_presente).upper()
+    if banco_flag in {"N", "NAO", "NÃO", "SEM", "0"}:
+        status_map["BCO"] = "N/A"
+    return status_map
+
+
+def map_stage_status_from_raw_value(value) -> str:
+    raw = safe_str(value).upper()
+    if raw in {"S", "SIM", "OK"}:
+        return "SIM"
+    if raw in {"N", "NAO", "NÃO", "X"}:
+        return "NAO"
+    return "N/A"
+
+
+def build_demo_status_map(
+    main_stage: str,
+    has_banco: bool,
+    ac_pending: bool,
+    prep_pending: bool,
+    serra_pending: bool,
+    expe_pending: bool,
+):
+    stage_lookup = {normalize_etapa(etapa): etapa for etapa in ETAPAS_PRODUCAO}
+    
+    def resolve_stage_key(alias: str) -> str:
+        alias_norm = normalize_etapa(alias)
+        if alias_norm in stage_lookup:
+            return alias_norm
+        for candidate in stage_lookup:
+            if candidate.startswith(alias_norm) or alias_norm.startswith(candidate):
+                return candidate
+        raise KeyError(alias)
+
+    stage_vidros = resolve_stage_key("VIDROS")
+    stage_ac = resolve_stage_key("A/C")
+    stage_prep = resolve_stage_key("PREP")
+    stage_serra = resolve_stage_key("SERRA")
+    stage_expe = resolve_stage_key("EXPE")
+    stage_desmont = resolve_stage_key("DESMONT")
+    stage_eletrica = resolve_stage_key("ELETRICA")
+    stage_revest = resolve_stage_key("REVEST")
+    stage_bco = resolve_stage_key("BCO")
+    stage_acesso = resolve_stage_key("ACESSO")
+    stage_plota = resolve_stage_key("PLOTA")
+    stage_libera = resolve_stage_key("LIBERA")
+
+    statuses = {etapa: "NAO" for etapa in ETAPAS_PRODUCAO}
+    if not has_banco:
+        statuses[stage_lookup[stage_bco]] = "N/A"
+
+    if main_stage == "FINALIZADO":
+        for etapa in ETAPAS_PRODUCAO:
+            statuses[etapa] = "SIM"
+        if not has_banco:
+            statuses[stage_lookup[stage_bco]] = "N/A"
+        return statuses
+
+    done_by_main_stage = {
+        stage_vidros: [],
+        stage_desmont: [stage_vidros],
+        stage_eletrica: [stage_vidros, stage_desmont],
+        stage_revest: [stage_vidros, stage_desmont, stage_eletrica],
+        stage_bco: [stage_vidros, stage_desmont, stage_eletrica, stage_revest],
+        stage_libera: [stage_vidros, stage_desmont, stage_eletrica, stage_revest, stage_acesso, stage_plota],
+    }
+
+    for stage_norm in done_by_main_stage.get(main_stage, []):
+        statuses[stage_lookup[stage_norm]] = "SIM"
+    if main_stage == stage_libera and has_banco:
+        statuses[stage_lookup[stage_bco]] = "SIM"
+
+    statuses[stage_lookup[stage_ac]] = "NAO" if ac_pending else "SIM"
+    statuses[stage_lookup[stage_prep]] = "NAO" if prep_pending else "SIM"
+    statuses[stage_lookup[stage_serra]] = "NAO" if serra_pending else "SIM"
+    statuses[stage_lookup[stage_expe]] = "NAO" if expe_pending else "SIM"
+
+    if main_stage in stage_lookup:
+        statuses[stage_lookup[main_stage]] = "NAO"
+
+    if main_stage != stage_libera:
+        statuses[stage_lookup[stage_libera]] = "NAO"
+        statuses[stage_lookup[stage_acesso]] = "NAO"
+        statuses[stage_lookup[stage_plota]] = "NAO"
+
+    return statuses
+
+
+def create_demo_ordem_servico(chassi: str, modelo: str, cliente: str, destino: str):
+    if DocxDocument is None:
+        return None
+
+    caminho = OS_UPLOAD_DIR / f"demo_{chassi}.docx"
+    doc = DocxDocument()
+    doc.add_heading(f"Ordem de Servico - {chassi}", level=1)
+    doc.add_paragraph(f"Modelo: {modelo}")
+    doc.add_paragraph(f"Cliente: {cliente}")
+    doc.add_paragraph(f"Destino: {destino}")
+    doc.add_paragraph("Checklist sugerido para teste:")
+
+    tabela = doc.add_table(rows=1, cols=3)
+    cabecalho = tabela.rows[0].cells
+    cabecalho[0].text = "Item"
+    cabecalho[1].text = "Conferencia"
+    cabecalho[2].text = "Observacao"
+
+    for item in ["Estrutura", "Acabamento", "Eletrica"]:
+        linha = tabela.add_row().cells
+        linha[0].text = item
+        linha[1].text = "Pendente"
+        linha[2].text = "Gerado automaticamente"
+
+    doc.save(caminho)
+    return models.OrdemServico(
+        chassi=chassi,
+        nome_arquivo=f"O.S._{chassi}.docx",
+        caminho_arquivo=str(caminho),
+    )
+
+
+def create_demo_bom_items(db: Session, chassi: str, tipo: str, done_count: int, rng: random.Random):
+    selected_items = rng.sample(DEMO_BOM_DESCRICOES, k=min(4, len(DEMO_BOM_DESCRICOES)))
+    created_items = []
+
+    for idx, (codigo, item_nome, descricao) in enumerate(selected_items, start=1):
+        quantidade = rng.randint(1, 6)
+        item = models.BomItem(
+            tipo=tipo,
+            chassi=chassi,
+            cod_item=f"{codigo}-{idx}",
+            item=item_nome,
+            descricao=descricao,
+            qtd=str(quantidade),
+            status="SIM" if idx <= done_count else "NAO",
+        )
+        db.add(item)
+        created_items.append(item)
+
+    db.flush()
+    return created_items
+
+
+def generate_demo_dataset(db: Session, quantidade: int = 24):
+    rng = random.Random()
+    agora = datetime.datetime.now(LOCAL_TZ)
+    main_stages = [
+        normalize_etapa("VIDROS"),
+        normalize_etapa("DESMONT"),
+        normalize_etapa("ELETRICA"),
+        normalize_etapa("REVEST"),
+        normalize_etapa("BCO"),
+        normalize_etapa("LIBERA"),
+        "FINALIZADO",
+    ]
+    stage_index_lookup = {
+        normalize_etapa(etapa): idx
+        for idx, etapa in enumerate(ETAPAS_PRODUCAO)
+    }
+
+    scenario_pool = []
+    while len(scenario_pool) < quantidade:
+        scenario_pool.extend(main_stages)
+    rng.shuffle(scenario_pool)
+
+    clear_active_base(db, preserve_ordens_servico=False)
+
+    demo_rows = []
+    for idx in range(quantidade):
+        chassi = f"TESTE{idx + 1:05d}"
+        modelo = rng.choice(DEMO_MODELOS)
+        cliente = rng.choice(DEMO_CLIENTES)
+        destino = rng.choice(DEMO_DESTINOS)
+        ar_condicionado = "GE" if idx % 2 == 0 else "CLIM"
+        has_banco = idx % 5 != 0
+        banco_presente = "SIM" if has_banco else "NAO"
+        banco_comentario = rng.choice(DEMO_BANCO_COMENTARIOS) if has_banco else "SEM BANCO"
+        localizacao = rng.choice(LOCALIZACOES)
+        main_stage = scenario_pool[idx]
+        ac_pending = idx % 6 == 0
+        prep_pending = idx % 3 == 0
+        serra_pending = idx % 4 == 0
+        expe_pending = idx % 5 in {0, 1}
+        status_map = build_demo_status_map(
+            main_stage=main_stage,
+            has_banco=has_banco,
+            ac_pending=ac_pending,
+            prep_pending=prep_pending,
+            serra_pending=serra_pending,
+            expe_pending=expe_pending,
+        )
+
+        veiculo = models.Veiculo(
+            chassi=chassi,
+            modelo=modelo,
+            ordem=idx + 1,
+            ar_condicionado=ar_condicionado,
+            cj_bco=f"CJ-{rng.randint(100, 999)}",
+            cliente=cliente,
+            destino=destino,
+            localizacao=localizacao,
+            banco_presente=banco_presente,
+            banco_comentario=banco_comentario,
+        )
+        db.add(veiculo)
+
+        for etapa in ETAPAS_PRODUCAO:
+            status = status_map.get(etapa, "NAO")
+            inicio = None
+            termino = None
+            responsavel = ""
+            observacao = ""
+            etapa_idx = stage_index_lookup.get(normalize_etapa(etapa), 0)
+            inicio_base = agora - datetime.timedelta(days=max(0, quantidade - idx) // 5, hours=(len(ETAPAS_PRODUCAO) - etapa_idx))
+
+            if status == "SIM":
+                inicio = inicio_base
+                termino = inicio + datetime.timedelta(minutes=35 + ((idx + etapa_idx) % 90))
+                responsavel = rng.choice(DEMO_RESPONSAVEIS)
+                observacao = "Concluido pela base de teste."
+            elif normalize_etapa(etapa) == main_stage or (status == "NAO" and rng.random() < 0.12):
+                inicio = inicio_base
+                responsavel = rng.choice(DEMO_RESPONSAVEIS)
+                observacao = "Em aberto na base de teste."
+
+            db.add(
+                models.Apontamento(
+                    chassi=chassi,
+                    etapa=etapa,
+                    status=status,
+                    responsavel=responsavel,
+                    inicio=inicio,
+                    termino=termino,
+                    localizacao=localizacao,
+                    observacao=observacao,
+                )
+            )
+
+            if inicio:
+                registrar_historico_evento(
+                    db,
+                    veiculo,
+                    etapa,
+                    status,
+                    responsavel,
+                    inicio=inicio,
+                    termino=termino,
+                    observacao=observacao,
+                )
+
+        prep_done = main_stage in {
+            normalize_etapa("ELETRICA"),
+            normalize_etapa("REVEST"),
+            normalize_etapa("BCO"),
+            normalize_etapa("LIBERA"),
+            "FINALIZADO",
+        } and not prep_pending
+        expe_done = main_stage in {normalize_etapa("LIBERA"), "FINALIZADO"} and not expe_pending
+
+        demo_rows.append(
+            {
+                "chassi": chassi,
+                "modelo": modelo,
+                "cliente": cliente,
+                "destino": destino,
+                "prep_done": prep_done,
+                "expe_done": expe_done,
+                "add_os": idx < min(8, quantidade),
+                "responsavel": rng.choice(DEMO_RESPONSAVEIS),
+            }
+        )
+
+    db.flush()
+
+    empenhos_pendentes = []
+    for row in demo_rows:
+        prep_done_count = 4 if row["prep_done"] else rng.randint(0, 2)
+        exp_done_count = 4 if row["expe_done"] else rng.randint(0, 2)
+
+        create_demo_bom_items(db, row["chassi"], "PREPARACAO", prep_done_count, rng)
+        exp_items = create_demo_bom_items(db, row["chassi"], "EXPEDICAO", exp_done_count, rng)
+
+        sync_stage_from_bom(db, "PREPARACAO", row["chassi"], row["responsavel"])
+        sync_stage_from_bom(db, "EXPEDICAO", row["chassi"], row["responsavel"])
+
+        if row["add_os"]:
+            ordem_servico = create_demo_ordem_servico(
+                chassi=row["chassi"],
+                modelo=row["modelo"],
+                cliente=row["cliente"],
+                destino=row["destino"],
+            )
+            if ordem_servico:
+                db.add(ordem_servico)
+
+        for item in exp_items:
+            if str(item.status).strip().upper() != "SIM":
+                continue
+            qtd_item = float(str(item.qtd).replace(",", "."))
+            qtd_empenhada = qtd_item if rng.random() < 0.6 else max(1.0, qtd_item - 1.0)
+            empenhos_pendentes.append(
+                {
+                    "item": item,
+                    "qtd_empenhada": qtd_empenhada,
+                    "responsavel": row["responsavel"],
+                }
+            )
+
+    generate_automatic_sequences(db)
+    db.flush()
+
+    for empenho_data in empenhos_pendentes:
+        item = empenho_data["item"]
+        db.add(
+            models.Empenho(
+                bom_item_id=item.id,
+                chassi=item.chassi,
+                cod_item=item.cod_item,
+                item=item.item,
+                descricao=item.descricao,
+                qtd_empenhada=empenho_data["qtd_empenhada"],
+                sequencia_producao=get_sequence_number(db, "EXPEDICAO", item.chassi),
+                responsavel=empenho_data["responsavel"],
+            )
+        )
+
+    return quantidade
+
 @app.get("/")
 async def home(request: Request, db: Session = Depends(database.get_db), modelo: str = None, etapa: str = None):
     if not require_login(request):
         return RedirectResponse(url="/login", status_code=303)
     if not is_management_user(request):
         return RedirectResponse(url=get_operator_home_url(request), status_code=303)
-    query = db.query(models.Veiculo)
+    query = active_vehicle_query(db)
 
     # Filtragem por texto (Modelo, Chassi, Ar Condicionado, CJ. BCO, Localização)
     # Adicionado func.coalesce para evitar que valores NULL quebrem a busca LIKE
@@ -1104,9 +1558,9 @@ async def detalhes(request: Request, chassi: str, db: Session = Depends(database
     c_limpo = chassi.strip()
     user_name = get_user_name(request)
 
-    veiculo = db.query(models.Veiculo).filter(
-        func.trim(cast(models.Veiculo.chassi, String)) == c_limpo
-    ).first()
+    veiculo = get_vehicle_by_chassi(db, c_limpo)
+    if not veiculo:
+        return RedirectResponse(url="/", status_code=303)
 
     feitos = db.query(models.Apontamento).filter(
         func.trim(cast(models.Apontamento.chassi, String)) == c_limpo
@@ -1170,61 +1624,85 @@ async def upload_base(request: Request, file: UploadFile = File(...), db: Sessio
 
         etapas_col = {normalize_etapa(c): c for c in df.columns}
 
-        # Limpa dados anteriores para nova carga
-        ordens_servico = db.query(models.OrdemServico).all()
-        for ordem_servico in ordens_servico:
-            remove_ordem_servico_arquivo(ordem_servico)
-        db.query(models.Empenho).delete()
-        db.query(models.BomItem).delete()
-        db.query(models.OrdemServico).delete()
-        db.query(models.PostoSequencia).delete()
-        db.query(models.Apontamento).delete()
-        db.query(models.Veiculo).delete()
-        db.commit()
+        # Prepara nova carga sem apagar O.S., B.O.M. e empenhos.
+        prepare_base_import(db)
 
+        imported_rows = []
+        imported_chassis = []
         for idx, row in df.iterrows():
             ch_raw = str(row.get("CHASSI", "")).strip().split(".")[0]
             if not ch_raw or ch_raw.lower() == "nan":
                 continue
 
-            modelo = str(row.get("MMMV", "")).strip().upper()
-            ar_cond = get_col(row, "AR CONDICIONADO", "AR_CONDICIONADO", "AR-CONDICIONADO", "ARCONDICIONADO")
-            cj_bco = get_col(row, "CJ. BCO", "CJ BCO", "CJ_BCO", "CJ-BCO")
-            cliente = get_col(row, "CLIENTE")
-            destino = get_col(row, "DESTINO")
-            localizacao = get_col(row, "LOCALIZACAO", "LOCALIZAÇÃO")
-            banco_presente = get_col(row, "BANCO", "BANCO_PRESENTE", "POSSUI BANCO", "TEM BANCO")
-            banco_comentario = get_col(row, "COMENTARIO BANCO", "COMENTARIO_BANCO", "BANCO OBS", "OBS BANCO")
+            imported_rows.append(
+                {
+                    "chassi": ch_raw,
+                    "ordem": int(idx) + 1,
+                    "modelo": str(row.get("MMMV", "")).strip().upper(),
+                    "ar_condicionado": get_col(row, "AR CONDICIONADO", "AR_CONDICIONADO", "AR-CONDICIONADO", "ARCONDICIONADO"),
+                    "cj_bco": get_col(row, "CJ. BCO", "CJ BCO", "CJ_BCO", "CJ-BCO"),
+                    "cliente": get_col(row, "CLIENTE"),
+                    "destino": get_col(row, "DESTINO"),
+                    "localizacao": get_col(row, "LOCALIZACAO", "LOCALIZAÇÃO"),
+                    "banco_presente": get_col(row, "BANCO", "BANCO_PRESENTE", "POSSUI BANCO", "TEM BANCO"),
+                    "banco_comentario": get_col(row, "COMENTARIO BANCO", "COMENTARIO_BANCO", "BANCO OBS", "OBS BANCO"),
+                    "row": row,
+                }
+            )
+            imported_chassis.append(ch_raw)
 
-            db.add(models.Veiculo(
-                chassi=ch_raw,
-                modelo=modelo,
-                ordem=int(idx) + 1,
-                ar_condicionado=ar_cond,
-                cj_bco=cj_bco,
-                cliente=cliente,
-                destino=destino,
-                localizacao=localizacao,
-                banco_presente=banco_presente,
-                banco_comentario=banco_comentario
-            ))
+        if not imported_rows:
+            return {"status": "erro", "detail": "Nenhum chassi valido encontrado na base."}
+
+        db.query(models.Apontamento).filter(
+            func.trim(cast(models.Apontamento.chassi, String)).in_(imported_chassis)
+        ).delete(synchronize_session=False)
+
+        existing_vehicles = {
+            str(item.chassi).strip(): item
+            for item in db.query(models.Veiculo).filter(
+                func.trim(cast(models.Veiculo.chassi, String)).in_(imported_chassis)
+            ).all()
+        }
+
+        for item in imported_rows:
+            veiculo = existing_vehicles.get(item["chassi"])
+            if not veiculo:
+                veiculo = models.Veiculo(chassi=item["chassi"])
+                db.add(veiculo)
+                existing_vehicles[item["chassi"]] = veiculo
+
+            veiculo.modelo = item["modelo"]
+            veiculo.ordem = item["ordem"]
+            veiculo.ativo = True
+            veiculo.ar_condicionado = item["ar_condicionado"]
+            veiculo.cj_bco = item["cj_bco"]
+            veiculo.cliente = item["cliente"]
+            veiculo.destino = item["destino"]
+            veiculo.localizacao = item["localizacao"]
+            veiculo.banco_presente = item["banco_presente"]
+            veiculo.banco_comentario = item["banco_comentario"]
 
             for etapa in ETAPAS_PRODUCAO:
                 col_name = etapas_col.get(normalize_etapa(etapa))
                 if col_name:
-                    val = str(row[col_name]).strip().upper()
-                    status = (
-                        "SIM" if val in ["S", "SIM", "OK"]
-                        else "NÃO" if val in ["N", "NÃO", "X"]
-                        else "N/A"
-                    )
+                    status = map_stage_status_from_raw_value(item["row"][col_name])
                 else:
                     status = "N/A"
-                db.add(models.Apontamento(
-                    chassi=ch_raw,
-                    etapa=etapa,
-                    status=status
-                ))
+                db.add(
+                    models.Apontamento(
+                        chassi=item["chassi"],
+                        etapa=etapa,
+                        status=status
+                    )
+                )
+
+        db.flush()
+
+        for chassi in imported_chassis:
+            for tipo in ["PREPARACAO", "EXPEDICAO"]:
+                if get_bom_items(db, tipo, chassi):
+                    sync_stage_from_bom(db, tipo, chassi, get_latest_bom_responsavel(db, tipo, chassi))
 
         db.commit()
         return {"status": "sucesso"}
@@ -1232,6 +1710,25 @@ async def upload_base(request: Request, file: UploadFile = File(...), db: Sessio
     except Exception as e:
         db.rollback()
         return {"status": "erro", "detail": str(e)}
+
+
+@app.post("/gerar_base_teste")
+async def gerar_base_teste(request: Request, db: Session = Depends(database.get_db)):
+    if not require_login(request):
+        return {"status": "erro", "detail": "Login necessario"}
+    if not require_admin(request):
+        return {"status": "erro", "detail": "Acesso restrito ao ADM"}
+
+    try:
+        quantidade = generate_demo_dataset(db)
+        db.commit()
+        return {
+            "status": "sucesso",
+            "detail": f"{quantidade} registros de teste gerados com sucesso.",
+        }
+    except Exception as exc:
+        db.rollback()
+        return {"status": "erro", "detail": str(exc)}
 
 @app.post("/upload_apontamentos")
 async def upload_apontamentos(request: Request, file: UploadFile = File(...), db: Session = Depends(database.get_db)):
@@ -1290,7 +1787,8 @@ async def upload_apontamentos(request: Request, file: UploadFile = File(...), db
                 update_data["banco_comentario"] = data["banco_comentario"]
             if update_data:
                 db.query(models.Veiculo).filter(
-                    func.trim(cast(models.Veiculo.chassi, String)) == ch_raw
+                    func.trim(cast(models.Veiculo.chassi, String)) == ch_raw,
+                    active_vehicle_filter(),
                 ).update(update_data)
 
         if rows:
@@ -1360,9 +1858,7 @@ async def salvar(request: Request, data: dict = Body(...), db: Session = Depends
         localizacao=None
     ))
 
-    v = db.query(models.Veiculo).filter(
-        func.trim(cast(models.Veiculo.chassi, String)) == ch
-    ).first()
+    v = get_vehicle_by_chassi(db, ch)
 
     # Registra no histórico apenas quando for status (SIM/NÃO/N/A) e explícito
     if registrar_historico:
@@ -1388,7 +1884,8 @@ async def atualizar_localizacao(data: dict = Body(...), db: Session = Depends(da
         return {"status": "erro", "detail": "Chassi inválido"}
 
     db.query(models.Veiculo).filter(
-        func.trim(cast(models.Veiculo.chassi, String)) == ch
+        func.trim(cast(models.Veiculo.chassi, String)) == ch,
+        active_vehicle_filter(),
     ).update({"localizacao": localizacao})
     db.commit()
     return {"status": "ok"}
@@ -1402,7 +1899,8 @@ async def atualizar_banco(data: dict = Body(...), db: Session = Depends(database
         return {"status": "erro", "detail": "Chassi inválido"}
 
     db.query(models.Veiculo).filter(
-        func.trim(cast(models.Veiculo.chassi, String)) == ch
+        func.trim(cast(models.Veiculo.chassi, String)) == ch,
+        active_vehicle_filter(),
     ).update({
         "banco_presente": banco_presente,
         "banco_comentario": banco_comentario
@@ -1527,7 +2025,7 @@ async def exportar_veiculos(request: Request, db: Session = Depends(database.get
     if not require_admin(request):
         return RedirectResponse(url="/", status_code=303)
 
-    veiculos = db.query(models.Veiculo).order_by(models.Veiculo.ordem.asc()).all()
+    veiculos = active_vehicle_query(db).order_by(models.Veiculo.ordem.asc()).all()
     df = pd.DataFrame(
         [
             {
@@ -1577,7 +2075,11 @@ async def exportar_bom_preparacao(request: Request, db: Session = Depends(databa
     if not require_admin(request):
         return RedirectResponse(url="/", status_code=303)
 
-    itens = db.query(models.BomItem).filter(models.BomItem.tipo == "PREPARACAO").order_by(models.BomItem.chassi.asc(), models.BomItem.id.asc()).all()
+    active_chassis = get_active_chassis(db)
+    itens = db.query(models.BomItem).filter(
+        models.BomItem.tipo == "PREPARACAO",
+        models.BomItem.chassi.in_(active_chassis),
+    ).order_by(models.BomItem.chassi.asc(), models.BomItem.id.asc()).all() if active_chassis else []
     df = pd.DataFrame(
         [
             {
@@ -1600,7 +2102,7 @@ async def exportar_bom_preparacao(request: Request, db: Session = Depends(databa
 async def exportar_bom_expedicao(request: Request, db: Session = Depends(database.get_db)):
     if not require_login(request):
         return RedirectResponse(url="/login", status_code=303)
-    if not require_admin(request):
+    if not can_export_expedicao_lancamentos(request):
         return RedirectResponse(url="/", status_code=303)
 
     df = pd.DataFrame(build_expedicao_export_rows(db))
@@ -1614,7 +2116,10 @@ async def exportar_empenhos(request: Request, db: Session = Depends(database.get
     if not can_export_expedicao_lancamentos(request):
         return RedirectResponse(url="/", status_code=303)
 
-    empenhos = db.query(models.Empenho).order_by(models.Empenho.sequencia_producao.asc(), models.Empenho.criado_em.asc()).all()
+    active_chassis = get_active_chassis(db)
+    empenhos = db.query(models.Empenho).filter(
+        models.Empenho.chassi.in_(active_chassis)
+    ).order_by(models.Empenho.sequencia_producao.asc(), models.Empenho.criado_em.asc()).all() if active_chassis else []
     consolidated_rows = build_expedicao_export_rows(db)
     consolidated_map = {
         (
@@ -1706,6 +2211,123 @@ async def limpar_logs(request: Request, db: Session = Depends(database.get_db)):
     db.commit()
     return RedirectResponse(url="/", status_code=303)
 
+
+@app.post("/resetar_ordens_servico")
+async def resetar_ordens_servico(request: Request, db: Session = Depends(database.get_db)):
+    if not require_login(request):
+        return {"status": "erro", "detail": "Login necessario"}
+    if not require_admin(request):
+        return {"status": "erro", "detail": "Acesso restrito ao ADM"}
+
+    try:
+        removidas = reset_ordens_servico(db)
+        db.commit()
+        return {
+            "status": "sucesso",
+            "detail": f"{removidas} ordens de servico removidas com sucesso.",
+        }
+    except Exception as exc:
+        db.rollback()
+        return {"status": "erro", "detail": str(exc)}
+
+
+@app.post("/resetar_empenho_obsoleto")
+async def resetar_empenho_obsoleto(request: Request, db: Session = Depends(database.get_db)):
+    if not require_login(request):
+        return {"status": "erro", "detail": "Login necessario"}
+    if not require_admin(request):
+        return {"status": "erro", "detail": "Acesso restrito ao ADM"}
+
+    try:
+        active_chassis = get_active_chassis(db)
+        query = db.query(models.Empenho)
+        if active_chassis:
+            query = query.filter(~models.Empenho.chassi.in_(active_chassis))
+        removidos = query.count()
+        query.delete(synchronize_session=False)
+        db.commit()
+        return {
+            "status": "sucesso",
+            "detail": f"{removidos} empenhos obsoletos removidos com sucesso.",
+        }
+    except Exception as exc:
+        db.rollback()
+        return {"status": "erro", "detail": str(exc)}
+
+
+@app.post("/cadastros/veiculos")
+async def cadastrar_veiculo(
+    request: Request,
+    chassi: str = Form(...),
+    modelo: str = Form(...),
+    ordem: str = Form(""),
+    ar_condicionado: str = Form(""),
+    cj_bco: str = Form(""),
+    cliente: str = Form(""),
+    destino: str = Form(""),
+    localizacao: str = Form(""),
+    banco_presente: str = Form(""),
+    banco_comentario: str = Form(""),
+    db: Session = Depends(database.get_db),
+):
+    if not require_login(request):
+        return {"status": "erro", "detail": "Login necessario"}
+    if not require_admin(request):
+        return {"status": "erro", "detail": "Acesso restrito ao ADM"}
+
+    chassi_key = safe_str(chassi).split(".")[0]
+    modelo_key = safe_str(modelo).upper()
+    if not chassi_key or not modelo_key:
+        return {"status": "erro", "detail": "Informe ao menos chassi e modelo."}
+
+    try:
+        ordem_key = int(str(ordem).strip()) if safe_str(ordem) else get_next_vehicle_order(db)
+    except ValueError:
+        return {"status": "erro", "detail": "A ordem precisa ser numerica."}
+
+    try:
+        veiculo = get_vehicle_by_chassi(db, chassi_key, active_only=False)
+        criado = veiculo is None
+        if not veiculo:
+            veiculo = models.Veiculo(chassi=chassi_key)
+            db.add(veiculo)
+
+        veiculo.modelo = modelo_key
+        veiculo.ordem = ordem_key
+        veiculo.ativo = True
+        veiculo.ar_condicionado = safe_str(ar_condicionado).upper()
+        veiculo.cj_bco = safe_str(cj_bco)
+        veiculo.cliente = safe_str(cliente)
+        veiculo.destino = safe_str(destino)
+        veiculo.localizacao = safe_str(localizacao)
+        veiculo.banco_presente = safe_str(banco_presente).upper()
+        veiculo.banco_comentario = safe_str(banco_comentario)
+
+        status_map = build_manual_vehicle_stage_statuses(veiculo.banco_presente)
+        for etapa in ETAPAS_PRODUCAO:
+            apont = get_apontamento_for_stage(db, chassi_key, etapa)
+            if not apont:
+                db.add(
+                    models.Apontamento(
+                        chassi=chassi_key,
+                        etapa=etapa,
+                        status=status_map.get(etapa, "NAO"),
+                        localizacao=veiculo.localizacao,
+                    )
+                )
+
+        db.flush()
+        for tipo in ["PREPARACAO", "EXPEDICAO"]:
+            if get_bom_items(db, tipo, chassi_key):
+                sync_stage_from_bom(db, tipo, chassi_key, get_latest_bom_responsavel(db, tipo, chassi_key))
+
+        db.commit()
+        mensagem = "Veiculo cadastrado com sucesso." if criado else "Veiculo atualizado com sucesso."
+        return {"status": "sucesso", "detail": mensagem}
+    except Exception as exc:
+        db.rollback()
+        return {"status": "erro", "detail": str(exc)}
+
 @app.get("/postos")
 async def postos_page(request: Request):
     if not require_login(request):
@@ -1765,9 +2387,7 @@ async def posto_card_detail(request: Request, posto: str, chassi: str, db: Sessi
     if not posto_cfg or not can_access_posto(request, posto_key):
         return RedirectResponse(url="/postos", status_code=303)
 
-    veiculo = db.query(models.Veiculo).filter(
-        func.trim(cast(models.Veiculo.chassi, String)) == str(chassi).strip()
-    ).first()
+    veiculo = get_vehicle_by_chassi(db, chassi)
     if not veiculo:
         return RedirectResponse(url=f"/postos/{posto_key}", status_code=303)
 
@@ -1831,9 +2451,7 @@ async def operacao_acao(request: Request, data: dict = Body(...), db: Session = 
     if not can_access_posto(request, posto_key):
         return {"status": "erro", "detail": "Posto não permitido para este usuário"}
 
-    veiculo = db.query(models.Veiculo).filter(
-        func.trim(cast(models.Veiculo.chassi, String)) == chassi
-    ).first()
+    veiculo = get_vehicle_by_chassi(db, chassi)
     if not veiculo:
         return {"status": "erro", "detail": "Chassi não encontrado"}
 
@@ -1987,9 +2605,7 @@ async def sequenciamento_save(
     if sequencia < 1:
         return render_sequenciamento_page(request, db, erro="A sequência deve ser maior que zero.", form_data=form_data)
 
-    veiculo = db.query(models.Veiculo).filter(
-        func.trim(cast(models.Veiculo.chassi, String)) == chassi_key
-    ).first()
+    veiculo = get_vehicle_by_chassi(db, chassi_key)
     if not veiculo:
         return render_sequenciamento_page(request, db, erro="Chassi não encontrado na base atual.", form_data=form_data)
 
@@ -2062,9 +2678,7 @@ async def sequenciamento_os_upload(
     if not file.filename or not file.filename.lower().endswith(".docx"):
         return render_sequenciamento_page(request, db, erro="A O.S. deve ser enviada em arquivo DOCX.")
 
-    veiculo = db.query(models.Veiculo).filter(
-        func.trim(cast(models.Veiculo.chassi, String)) == chassi_key
-    ).first()
+    veiculo = get_vehicle_by_chassi(db, chassi_key)
     if not veiculo:
         return render_sequenciamento_page(request, db, erro="Chassi não encontrado na base atual.")
 
@@ -2203,6 +2817,7 @@ async def pg_importar(request: Request):
             "request": request,
             "current_user": require_login(request),
             "is_admin": bool(require_admin(request)),
+            "localizacoes": LOCALIZACOES,
         },
     )
 
