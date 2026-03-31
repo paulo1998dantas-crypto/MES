@@ -5,27 +5,34 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://cdn.tailwindcss.com"></script>
     <title>Sequenciamento</title>
+    <style>
+        html {
+            scroll-behavior: smooth;
+        }
+    </style>
 </head>
-<body class="bg-slate-100 min-h-screen">
+<body class="min-h-screen bg-slate-100">
     <header class="bg-slate-900 p-4 text-white shadow-lg">
-        <div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 md:flex-row">
             <div>
-                <a href="/" class="text-yellow-400 font-bold text-sm">← VOLTAR</a>
-                <h1 class="text-xl font-black mt-1">Sequenciamento por Posto</h1>
+                <a href="/" class="text-sm font-bold text-yellow-400">← VOLTAR</a>
+                <h1 class="mt-1 text-xl font-black">Sequenciamento por Posto</h1>
             </div>
             <div class="flex items-center gap-3 text-sm">
-                <a href="/usuarios" class="text-amber-300 font-bold uppercase text-xs">Usuarios</a>
-                <a href="/exportacoes" class="text-emerald-300 font-bold uppercase text-xs">Exportações</a>
-                <a href="/logout" class="text-slate-300 font-bold uppercase text-xs">Sair</a>
+                <a href="/usuarios" class="text-xs font-bold uppercase text-amber-300">Usuarios</a>
+                <a href="/exportacoes" class="text-xs font-bold uppercase text-emerald-300">Exportacoes</a>
+                <a href="/logout" class="text-xs font-bold uppercase text-slate-300">Sair</a>
             </div>
         </div>
     </header>
 
-    <main class="max-w-7xl mx-auto p-6 grid grid-cols-1 xl:grid-cols-[380px,1fr] gap-6">
-        <section class="space-y-6">
-            <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
-                <h2 class="text-lg font-black text-slate-800 mb-1">Definir Sequência</h2>
-                <p class="text-sm text-slate-500 mb-6">Escolha o posto, informe o chassi e a posição desejada.</p>
+    <main class="mx-auto grid max-w-[1600px] grid-cols-1 gap-6 p-6 2xl:grid-cols-[360px,minmax(0,1fr)]">
+        <section class="space-y-6 self-start 2xl:sticky 2xl:top-6">
+            <div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                <div class="mb-6">
+                    <h2 class="mb-1 text-lg font-black text-slate-800">Definir Sequencia</h2>
+                    <p class="text-sm text-slate-500">Escolha o posto, informe o chassi e ajuste a posicao desejada na fila.</p>
+                </div>
 
                 {% if erro %}
                 <div class="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">
@@ -41,8 +48,8 @@
 
                 <form method="post" action="/sequenciamento" class="space-y-4">
                     <div>
-                        <label class="block text-xs font-bold uppercase text-slate-500 mb-2">Posto</label>
-                        <select name="posto" class="w-full border border-slate-300 p-3 rounded-xl bg-white focus:ring-2 focus:ring-blue-500 outline-none transition" required>
+                        <label class="mb-2 block text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Posto</label>
+                        <select name="posto" class="w-full rounded-xl border border-slate-300 bg-white p-3 outline-none transition focus:ring-2 focus:ring-blue-500" required>
                             <option value="">Selecione</option>
                             {% for key, posto in postos.items() %}
                             <option value="{{ key }}" {% if form_data.get('posto') == key %}selected{% endif %}>{{ posto.label }}</option>
@@ -51,63 +58,63 @@
                     </div>
 
                     <div>
-                        <label class="block text-xs font-bold uppercase text-slate-500 mb-2">Chassi</label>
+                        <label class="mb-2 block text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Chassi</label>
                         <input type="text" name="chassi" value="{{ form_data.get('chassi', '') }}"
-                               class="w-full border border-slate-300 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition" required>
+                               class="w-full rounded-xl border border-slate-300 p-3 outline-none transition focus:ring-2 focus:ring-blue-500" required>
                     </div>
 
                     <div>
-                        <label class="block text-xs font-bold uppercase text-slate-500 mb-2">Sequência</label>
+                        <label class="mb-2 block text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Sequencia</label>
                         <input type="number" min="1" name="sequencia" value="{{ form_data.get('sequencia', '') }}"
-                               class="w-full border border-slate-300 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition" required>
+                               class="w-full rounded-xl border border-slate-300 p-3 outline-none transition focus:ring-2 focus:ring-blue-500" required>
                     </div>
 
-                    <button type="submit" class="w-full py-3 bg-slate-900 text-white rounded-2xl font-bold hover:bg-slate-800 transition">
+                    <button type="submit" class="w-full rounded-2xl bg-slate-900 py-3 font-bold text-white transition hover:bg-slate-800">
                         Salvar Sequenciamento
                     </button>
                 </form>
 
-                <div class="mt-5 pt-5 border-t border-slate-200">
-                    <h3 class="text-sm font-black text-slate-800 mb-2">Sequenciamento automatico</h3>
-                    <p class="text-sm text-slate-500 mb-4">
-                        Recria as filas com base na logica atual do lobby principal. Depois voce ainda pode editar ou excluir ajustes pontuais.
+                <div class="mt-5 border-t border-slate-200 pt-5">
+                    <h3 class="mb-2 text-sm font-black text-slate-800">Sequenciamento automatico</h3>
+                    <p class="mb-4 text-sm text-slate-500">
+                        Recria as filas com base na logica atual do lobby principal. Depois voce ainda pode fazer ajustes pontuais.
                     </p>
                     <form method="post" action="/sequenciamento/automatico" onsubmit="return confirm('Gerar novamente o sequenciamento automatico e substituir as atribuicoes atuais?');">
-                        <button type="submit" class="w-full py-3 bg-cyan-600 text-white rounded-2xl font-bold hover:bg-cyan-700 transition">
+                        <button type="submit" class="w-full rounded-2xl bg-cyan-600 py-3 font-bold text-white transition hover:bg-cyan-700">
                             Sequenciamento Automatico
                         </button>
                     </form>
                 </div>
             </div>
 
-            <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
-                <h2 class="text-lg font-black text-slate-800 mb-1">Anexar O.S.</h2>
-                <p class="text-sm text-slate-500 mb-6">Suba um arquivo DOCX para vincular ao card.</p>
+            <div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                <h2 class="mb-1 text-lg font-black text-slate-800">Anexar O.S.</h2>
+                <p class="mb-6 text-sm text-slate-500">Suba um arquivo DOCX para vincular ao card. Se o documento tiver a tabela de composicao, os checklists de Preparacao e Expedicao serao atualizados automaticamente com os mesmos itens.</p>
                 <form method="post" action="/sequenciamento/os-upload" enctype="multipart/form-data" class="space-y-4">
                     <div>
-                        <label class="block text-xs font-bold uppercase text-slate-500 mb-2">Chassi</label>
-                        <input type="text" name="chassi" class="w-full border border-slate-300 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition" required>
+                        <label class="mb-2 block text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Chassi</label>
+                        <input type="text" name="chassi" class="w-full rounded-xl border border-slate-300 p-3 outline-none transition focus:ring-2 focus:ring-blue-500" required>
                     </div>
                     <div>
-                        <label class="block text-xs font-bold uppercase text-slate-500 mb-2">Arquivo DOCX</label>
+                        <label class="mb-2 block text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Arquivo DOCX</label>
                         <input type="file" name="file" accept=".docx" class="w-full text-sm" required>
                     </div>
-                    <button type="submit" class="w-full py-3 bg-blue-600 text-white rounded-2xl font-bold hover:bg-blue-700 transition">
+                    <button type="submit" class="w-full rounded-2xl bg-blue-600 py-3 font-bold text-white transition hover:bg-blue-700">
                         Enviar O.S.
                     </button>
                 </form>
             </div>
 
-            <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
-                <h2 class="text-lg font-black text-slate-800 mb-1">Upload de B.O.M.</h2>
-                <p class="text-sm text-slate-500 mb-4">Planilha com colunas: nº chassi, cod. item, item, descrição, qtd.</p>
-                <a href="/modelo_bom_padrao" class="inline-flex mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-bold uppercase text-emerald-700 hover:bg-emerald-100 transition">
-                    Baixar Modelo Padrão B.O.M.
+            <div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                <h2 class="mb-1 text-lg font-black text-slate-800">Upload de B.O.M.</h2>
+                <p class="mb-4 text-sm text-slate-500">Planilha com colunas: numero do chassi, codigo do item, item, descricao e quantidade.</p>
+                <a href="/modelo_bom_padrao" class="mb-4 inline-flex rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-bold uppercase text-emerald-700 transition hover:bg-emerald-100">
+                    Baixar Modelo Padrao B.O.M.
                 </a>
                 <form method="post" action="/sequenciamento/bom-upload" enctype="multipart/form-data" class="space-y-4">
                     <div>
-                        <label class="block text-xs font-bold uppercase text-slate-500 mb-2">Tipo</label>
-                        <select name="tipo" class="w-full border border-slate-300 p-3 rounded-xl bg-white focus:ring-2 focus:ring-blue-500 outline-none transition" required>
+                        <label class="mb-2 block text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Tipo</label>
+                        <select name="tipo" class="w-full rounded-xl border border-slate-300 bg-white p-3 outline-none transition focus:ring-2 focus:ring-blue-500" required>
                             <option value="">Selecione</option>
                             {% for key, label in bom_tipos.items() %}
                             <option value="{{ key }}">{{ label }}</option>
@@ -115,61 +122,222 @@
                         </select>
                     </div>
                     <div>
-                        <label class="block text-xs font-bold uppercase text-slate-500 mb-2">Planilha</label>
+                        <label class="mb-2 block text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Planilha</label>
                         <input type="file" name="file" accept=".xlsx,.csv" class="w-full text-sm" required>
                     </div>
-                    <button type="submit" class="w-full py-3 bg-emerald-600 text-white rounded-2xl font-bold hover:bg-emerald-700 transition">
+                    <button type="submit" class="w-full rounded-2xl bg-emerald-600 py-3 font-bold text-white transition hover:bg-emerald-700">
                         Enviar B.O.M.
                     </button>
                 </form>
             </div>
         </section>
 
-        <section class="space-y-6">
-            {% for grupo in grupos %}
-            <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
-                <div class="flex items-center justify-between gap-4 mb-6">
+        <section class="min-w-0 space-y-6">
+            <div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                <div class="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
                     <div>
-                        <h2 class="text-lg font-black text-slate-800">{{ grupo.label }}</h2>
-                        <p class="text-sm text-slate-500">{{ grupo.cards|length }} card(s) neste posto</p>
+                        <div class="mb-2 text-xs font-bold uppercase tracking-[0.3em] text-cyan-600">Painel de Filas</div>
+                        <h2 class="text-2xl font-black text-slate-900">Visao consolidada do sequenciamento</h2>
+                        <p class="mt-2 max-w-3xl text-sm text-slate-500">
+                            A leitura foi concentrada por posto e em linhas compactas, para voce comparar a fila inteira sem depender de cards muito grandes.
+                        </p>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3 lg:min-w-[440px] lg:grid-cols-4">
+                        <div class="rounded-2xl bg-slate-950 px-4 py-4 text-white">
+                            <div class="text-[11px] uppercase tracking-[0.25em] text-slate-400">Postos</div>
+                            <div class="mt-2 text-2xl font-black">{{ resumo.total_postos }}</div>
+                        </div>
+                        <div class="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-4">
+                            <div class="text-[11px] uppercase tracking-[0.25em] text-emerald-600">Com fila</div>
+                            <div class="mt-2 text-2xl font-black text-emerald-900">{{ resumo.postos_com_fila }}</div>
+                        </div>
+                        <div class="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-4">
+                            <div class="text-[11px] uppercase tracking-[0.25em] text-amber-600">Vazios</div>
+                            <div class="mt-2 text-2xl font-black text-amber-900">{{ resumo.postos_vazios }}</div>
+                        </div>
+                        <div class="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-4">
+                            <div class="text-[11px] uppercase tracking-[0.25em] text-blue-600">Cards</div>
+                            <div class="mt-2 text-2xl font-black text-blue-900">{{ resumo.total_cards }}</div>
+                        </div>
                     </div>
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-{% for card in grupo.cards %}
-                    <div class="rounded-2xl border border-slate-200 p-4">
-                        <div class="flex items-start justify-between gap-3 mb-3">
-                            <div>
-                                <div class="text-xs font-bold uppercase text-slate-400">Sequência {{ card.sequencia }}</div>
-                                <div class="font-black text-slate-800 uppercase">{{ card.veiculo.modelo }}</div>
+                <div class="mt-6 border-t border-slate-200 pt-5">
+                    <div class="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-slate-500">Acesso rapido por posto</div>
+                    <div class="flex flex-wrap gap-2">
+                        {% for grupo in grupos %}
+                        <a href="#{{ grupo.key }}"
+                           class="inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-bold transition {% if grupo.cards_count %}bg-slate-900 text-white hover:bg-slate-800{% else %}bg-slate-100 text-slate-500 hover:bg-slate-200{% endif %}">
+                            <span>{{ grupo.label }}</span>
+                            <span class="rounded-full px-2 py-0.5 {% if grupo.cards_count %}bg-white/15 text-white{% else %}bg-white text-slate-500{% endif %}">
+                                {{ grupo.cards_count }}
+                            </span>
+                        </a>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            {% for grupo in grupos %}
+            <div id="{{ grupo.key }}" class="scroll-mt-24 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                <div class="mb-5 flex flex-col gap-4">
+                    <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                        <div>
+                            <div class="mb-2 flex flex-wrap items-center gap-2">
+                                <span class="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.25em] text-slate-500">
+                                    {{ grupo.modo_label }}
+                                </span>
+                                <span class="rounded-full bg-slate-900 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.25em] text-white">
+                                    {{ grupo.cards_count }} card(s)
+                                </span>
                             </div>
-                            <div class="text-[10px] font-mono bg-slate-100 px-2 py-1 rounded text-slate-500">{{ card.veiculo.chassi }}</div>
+                            <h2 class="text-xl font-black text-slate-900">{{ grupo.label }}</h2>
+                            <p class="mt-1 text-sm text-slate-500">
+                                Analise a fila em ordem e ajuste apenas os pontos necessarios.
+                            </p>
                         </div>
-                        <div class="grid grid-cols-1 gap-1 text-[11px] text-slate-600">
-                            <div><span class="font-semibold text-slate-500">Cliente:</span> {{ card.veiculo.cliente or "-" }}</div>
-                            <div><span class="font-semibold text-slate-500">Destino:</span> {{ card.veiculo.destino or "-" }}</div>
-                            <div><span class="font-semibold text-slate-500">Status:</span> {{ card.status_operacao }}</div>
-                            <div><span class="font-semibold text-slate-500">O.S.:</span> {% if card.tem_ordem_servico %}Anexada{% else %}-{% endif %}</div>
+                        <div class="flex flex-wrap gap-2">
+                            <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
+                                Aguardando {{ grupo.status_counts['AGUARDANDO'] }}
+                            </span>
+                            <span class="rounded-full border border-amber-100 bg-amber-50 px-3 py-1 text-xs font-bold text-amber-700">
+                                Em andamento {{ grupo.status_counts['EM ANDAMENTO'] }}
+                            </span>
+                            <span class="rounded-full border border-orange-100 bg-orange-50 px-3 py-1 text-xs font-bold text-orange-700">
+                                Parado {{ grupo.status_counts['PARADO'] }}
+                            </span>
+                            <span class="rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
+                                Finalizado {{ grupo.status_counts['FINALIZADO'] }}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                {% if grupo.cards_count %}
+                <div class="hidden overflow-x-auto rounded-2xl border border-slate-200 xl:block">
+                    <div class="min-w-[1180px]">
+                        <div class="grid grid-cols-[86px_220px_1.1fr_1fr_150px_110px_260px] bg-slate-50 text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">
+                            <div class="px-4 py-3">Seq.</div>
+                            <div class="px-4 py-3">Veiculo</div>
+                            <div class="px-4 py-3">Cliente / Destino</div>
+                            <div class="px-4 py-3">Contexto</div>
+                            <div class="px-4 py-3">Status</div>
+                            <div class="px-4 py-3">O.S.</div>
+                            <div class="px-4 py-3">Ajustes</div>
                         </div>
 
-                        <div class="mt-4 grid grid-cols-1 sm:grid-cols-[1fr,auto] gap-3">
-                            <form method="post" action="/sequenciamento" class="flex items-end gap-2">
+                        {% for card in grupo.cards %}
+                        <div class="grid grid-cols-[86px_220px_1.1fr_1fr_150px_110px_260px] items-stretch border-t border-slate-200 transition hover:bg-slate-50/80">
+                            <div class="px-4 py-4">
+                                <div class="inline-flex min-w-[52px] items-center justify-center rounded-2xl bg-slate-900 px-3 py-2 text-lg font-black text-white">
+                                    {{ card.sequencia }}
+                                </div>
+                            </div>
+
+                            <div class="px-4 py-4">
+                                <div class="font-mono text-xs text-slate-500">{{ card.veiculo.chassi }}</div>
+                                <div class="mt-1 font-black uppercase text-slate-900">{{ card.veiculo.modelo }}</div>
+                            </div>
+
+                            <div class="px-4 py-4 text-sm text-slate-600">
+                                <div><span class="font-semibold text-slate-500">Cliente:</span> {{ card.veiculo.cliente or "-" }}</div>
+                                <div class="mt-1"><span class="font-semibold text-slate-500">Destino:</span> {{ card.veiculo.destino or "-" }}</div>
+                            </div>
+
+                            <div class="px-4 py-4 text-sm text-slate-600">
+                                <div><span class="font-semibold text-slate-500">Local:</span> {{ card.veiculo.localizacao or "-" }}</div>
+                                <div class="mt-1"><span class="font-semibold text-slate-500">A/C:</span> {{ card.veiculo.ar_condicionado or "-" }}</div>
+                                <div class="mt-1"><span class="font-semibold text-slate-500">CJ BCO:</span> {{ card.veiculo.cj_bco or "-" }}</div>
+                            </div>
+
+                            <div class="px-4 py-4">
+                                <span class="inline-flex rounded-full border px-3 py-1 text-xs font-bold
+                                    {% if card.status_operacao == 'FINALIZADO' %}border-emerald-100 bg-emerald-50 text-emerald-700
+                                    {% elif card.status_operacao == 'EM ANDAMENTO' %}border-amber-100 bg-amber-50 text-amber-700
+                                    {% elif card.status_operacao == 'PARADO' %}border-orange-100 bg-orange-50 text-orange-700
+                                    {% else %}border-slate-200 bg-slate-100 text-slate-600{% endif %}">
+                                    {{ card.status_operacao }}
+                                </span>
+                            </div>
+
+                            <div class="px-4 py-4">
+                                {% if card.tem_ordem_servico %}
+                                <span class="inline-flex rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">Anexada</span>
+                                {% else %}
+                                <span class="inline-flex rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-bold text-slate-500">Sem O.S.</span>
+                                {% endif %}
+                            </div>
+
+                            <div class="px-4 py-4">
+                                <div class="flex items-center gap-2">
+                                    <form method="post" action="/sequenciamento" class="flex items-center gap-2">
+                                        <input type="hidden" name="posto" value="{{ card.posto }}">
+                                        <input type="hidden" name="chassi" value="{{ card.veiculo.chassi }}">
+                                        <input type="number" min="1" name="sequencia" value="{{ card.sequencia }}"
+                                               class="w-20 rounded-xl border border-slate-300 p-2 text-sm outline-none transition focus:ring-2 focus:ring-blue-500" required>
+                                        <button type="submit" class="rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white transition hover:bg-slate-800">
+                                            Salvar
+                                        </button>
+                                    </form>
+
+                                    <form method="post" action="/sequenciamento/excluir" onsubmit="return confirm('Excluir esta atribuicao deste posto?');">
+                                        <input type="hidden" name="posto" value="{{ card.posto }}">
+                                        <input type="hidden" name="chassi" value="{{ card.veiculo.chassi }}">
+                                        <button type="submit" class="rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white transition hover:bg-rose-700">
+                                            Excluir
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="space-y-3 xl:hidden">
+                    {% for card in grupo.cards %}
+                    <div class="rounded-2xl border border-slate-200 p-4">
+                        <div class="flex items-start justify-between gap-3">
+                            <div class="flex items-start gap-3">
+                                <div class="inline-flex min-w-[48px] items-center justify-center rounded-2xl bg-slate-900 px-3 py-2 text-base font-black text-white">
+                                    {{ card.sequencia }}
+                                </div>
+                                <div>
+                                    <div class="font-black uppercase text-slate-900">{{ card.veiculo.modelo }}</div>
+                                    <div class="mt-1 font-mono text-xs text-slate-500">{{ card.veiculo.chassi }}</div>
+                                </div>
+                            </div>
+                            <span class="inline-flex rounded-full border px-3 py-1 text-[11px] font-bold
+                                {% if card.status_operacao == 'FINALIZADO' %}border-emerald-100 bg-emerald-50 text-emerald-700
+                                {% elif card.status_operacao == 'EM ANDAMENTO' %}border-amber-100 bg-amber-50 text-amber-700
+                                {% elif card.status_operacao == 'PARADO' %}border-orange-100 bg-orange-50 text-orange-700
+                                {% else %}border-slate-200 bg-slate-100 text-slate-600{% endif %}">
+                                {{ card.status_operacao }}
+                            </span>
+                        </div>
+
+                        <div class="mt-4 grid grid-cols-1 gap-1 text-sm text-slate-600">
+                            <div><span class="font-semibold text-slate-500">Cliente:</span> {{ card.veiculo.cliente or "-" }}</div>
+                            <div><span class="font-semibold text-slate-500">Destino:</span> {{ card.veiculo.destino or "-" }}</div>
+                            <div><span class="font-semibold text-slate-500">Local:</span> {{ card.veiculo.localizacao or "-" }}</div>
+                            <div><span class="font-semibold text-slate-500">O.S.:</span> {% if card.tem_ordem_servico %}Anexada{% else %}Sem O.S.{% endif %}</div>
+                        </div>
+
+                        <div class="mt-4 flex flex-col gap-3 sm:flex-row">
+                            <form method="post" action="/sequenciamento" class="flex flex-1 items-center gap-2">
                                 <input type="hidden" name="posto" value="{{ card.posto }}">
                                 <input type="hidden" name="chassi" value="{{ card.veiculo.chassi }}">
-                                <div class="flex-1">
-                                    <label class="block text-[10px] font-bold uppercase text-slate-500 mb-1">Editar sequencia</label>
-                                    <input type="number" min="1" name="sequencia" value="{{ card.sequencia }}"
-                                           class="w-full border border-slate-300 p-2 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none transition" required>
-                                </div>
-                                <button type="submit" class="rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white hover:bg-slate-800 transition">
+                                <input type="number" min="1" name="sequencia" value="{{ card.sequencia }}"
+                                       class="w-24 rounded-xl border border-slate-300 p-2 text-sm outline-none transition focus:ring-2 focus:ring-blue-500" required>
+                                <button type="submit" class="rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white transition hover:bg-slate-800">
                                     Salvar
                                 </button>
                             </form>
 
-                            <form method="post" action="/sequenciamento/excluir" onsubmit="return confirm('Excluir esta atribuicao deste posto?');" class="flex items-end">
+                            <form method="post" action="/sequenciamento/excluir" onsubmit="return confirm('Excluir esta atribuicao deste posto?');">
                                 <input type="hidden" name="posto" value="{{ card.posto }}">
                                 <input type="hidden" name="chassi" value="{{ card.veiculo.chassi }}">
-                                <button type="submit" class="w-full rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white hover:bg-rose-700 transition">
+                                <button type="submit" class="w-full rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white transition hover:bg-rose-700">
                                     Excluir
                                 </button>
                             </form>
@@ -177,9 +345,8 @@
                     </div>
                     {% endfor %}
                 </div>
-
-                {% if grupo.cards|length == 0 %}
-                <div class="text-center py-12 rounded-2xl border-2 border-dashed border-slate-200 text-slate-400 font-medium">
+                {% else %}
+                <div class="rounded-2xl border-2 border-dashed border-slate-200 py-12 text-center font-medium text-slate-400">
                     Nenhum card sequenciado neste posto.
                 </div>
                 {% endif %}
@@ -187,6 +354,7 @@
             {% endfor %}
         </section>
     </main>
+
     <script src="/static/auto_refresh.js"></script>
     <script>
     setupAutoRefresh({ intervalMs: 15000 });

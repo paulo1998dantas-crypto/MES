@@ -6,10 +6,10 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <title>{{ posto.label }}</title>
 </head>
-<body class="bg-slate-100 min-h-screen">
+<body class="min-h-screen bg-slate-100">
     <header class="bg-slate-900 p-4 text-white shadow-lg">
-        <div class="max-w-4xl mx-auto flex items-center justify-between gap-4">
-            <a href="/postos/{{ posto.key }}" class="text-yellow-400 font-bold text-sm">← VOLTAR</a>
+        <div class="mx-auto flex max-w-4xl items-center justify-between gap-4">
+            <a href="/postos/{{ posto.key }}" class="text-sm font-bold text-yellow-400">← VOLTAR</a>
             <div class="text-right text-sm">
                 <div class="font-bold">{{ current_user.nome }}</div>
                 <div class="text-slate-300">{{ current_user.perfil }}</div>
@@ -17,16 +17,16 @@
         </div>
     </header>
 
-    <main class="max-w-4xl mx-auto p-4 space-y-4">
-        <section class="bg-white rounded-3xl p-5 shadow-sm border border-slate-200">
-            <div class="flex items-start justify-between gap-4 mb-4">
+    <main class="mx-auto max-w-4xl space-y-4 p-4">
+        <section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div class="mb-4 flex items-start justify-between gap-4">
                 <div>
                     <p class="text-xs font-bold uppercase text-slate-400">{{ posto.label }}</p>
-                    <h1 class="text-2xl font-black text-slate-800 uppercase">{{ veiculo.modelo }}</h1>
-                    <p class="text-xs text-slate-400 mt-1">CHASSI: {{ veiculo.chassi }}</p>
+                    <h1 class="text-2xl font-black uppercase text-slate-800">{{ veiculo.modelo }}</h1>
+                    <p class="mt-1 text-xs text-slate-400">CHASSI: {{ veiculo.chassi }}</p>
                 </div>
                 <div class="rounded-2xl bg-blue-50 px-4 py-3 text-right">
-                    <p class="text-[10px] uppercase font-bold text-blue-500">Status</p>
+                    <p class="text-[10px] font-bold uppercase text-blue-500">Status</p>
                     <p class="text-sm font-black text-blue-700">{{ status_operacao }}</p>
                 </div>
             </div>
@@ -47,51 +47,73 @@
             </div>
         </section>
 
-        <section class="bg-white rounded-3xl p-5 shadow-sm border border-slate-200">
-            <div class="flex items-center justify-between gap-4 mb-4">
+        <section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div class="mb-4 flex items-center justify-between gap-4">
                 <div>
                     <h2 class="text-lg font-black text-slate-800">Checklist da B.O.M.</h2>
-                    <p class="text-sm text-slate-500">Marque cada item com X ou OK.</p>
+                    <p class="text-sm text-slate-500">Marque cada item como X, N/A ou OK.</p>
                 </div>
                 <p id="msg" class="text-sm font-bold text-slate-500"></p>
             </div>
 
-<div class="space-y-3">
+            <div class="space-y-3">
                 {% for item in bom_itens %}
                 {% set resumo_empenho = empenhos_por_item.get(item.id, {}) %}
                 <div class="rounded-2xl border border-slate-200 p-4">
-                    <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+                    <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                         <div class="space-y-1">
                             <div class="text-xs font-bold uppercase text-slate-400">Cod. {{ item.cod_item or "-" }}</div>
                             <div class="font-black text-slate-800">{{ item.item or "-" }}</div>
                             <div class="text-sm text-slate-600">{{ item.descricao or "-" }}</div>
                             <div class="text-xs text-slate-500">Qtd: {{ item.qtd or "-" }}</div>
-                            {% if permite_empenho %}
-                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2 text-xs">
+
+                            <div class="grid grid-cols-1 gap-2 pt-2 text-xs sm:grid-cols-3 {% if permite_empenho %}lg:grid-cols-4{% endif %}">
                                 <div class="rounded-xl bg-slate-50 px-3 py-2">
-                                    <div class="font-bold text-slate-500 uppercase">Previsto</div>
+                                    <div class="font-bold uppercase text-slate-500">Previsto</div>
                                     <div class="font-black text-slate-800">{{ resumo_empenho.qtd_prevista_fmt or "-" }}</div>
                                 </div>
-                                <div class="rounded-xl bg-cyan-50 px-3 py-2">
-                                    <div class="font-bold text-cyan-700 uppercase">Consumido</div>
-                                    <div class="font-black text-cyan-900">{{ resumo_empenho.total_consumido_fmt or "0" }}</div>
+                                <div class="rounded-xl bg-emerald-50 px-3 py-2">
+                                    <div class="font-bold uppercase text-emerald-700">Apontado</div>
+                                    <div class="font-black text-emerald-900">{{ resumo_empenho.qtd_apontada_fmt or "0" }}</div>
                                 </div>
                                 <div class="rounded-xl bg-amber-50 px-3 py-2">
-                                    <div class="font-bold text-amber-700 uppercase">Saldo</div>
+                                    <div class="font-bold uppercase text-amber-700">Saldo</div>
                                     <div class="font-black text-amber-900">{{ resumo_empenho.saldo_fmt or "-" }}</div>
                                 </div>
+                                {% if permite_empenho %}
+                                <div class="rounded-xl bg-cyan-50 px-3 py-2">
+                                    <div class="font-bold uppercase text-cyan-700">Lancado</div>
+                                    <div class="font-black text-cyan-900">{{ resumo_empenho.total_lancado_fmt or "0" }}</div>
+                                </div>
+                                {% endif %}
                             </div>
-                            <div class="text-[11px] font-bold text-slate-500 uppercase">
+                            <div class="text-[11px] font-bold uppercase text-slate-500">
                                 Consumo: {{ resumo_empenho.status_consumo or "SEM_QTD_PREVISTA" }}
                             </div>
-                            {% endif %}
                         </div>
 
                         <div class="flex flex-wrap gap-2">
-                            <button onclick="salvarItem({{ item.id }}, 'NAO')" class="rounded-xl px-4 py-2 text-sm font-bold {% if (item.status or '')|upper in ['NAO', 'NÃO', 'X'] %}bg-rose-500 text-white{% else %}bg-slate-100 text-slate-600{% endif %}">X</button>
-                            <button onclick="salvarItem({{ item.id }}, 'SIM')" class="rounded-xl px-4 py-2 text-sm font-bold {% if (item.status or '')|upper == 'SIM' %}bg-emerald-600 text-white{% else %}bg-slate-100 text-slate-600{% endif %}">OK</button>
-                            {% if permite_empenho %}
-                            <div class="flex flex-col gap-2 min-w-[220px]">
+                            <button onclick="salvarItem({{ item.id }}, 'NAO')" class="rounded-xl px-4 py-2 text-sm font-bold {% if (item.status or '')|upper in ['NAO', 'NÃO', 'X'] %}bg-rose-500 text-white{% else %}bg-slate-100 text-slate-600{% endif %}">
+                                X
+                            </button>
+                            <button onclick="salvarItem({{ item.id }}, 'N/A')" class="rounded-xl px-4 py-2 text-sm font-bold {% if (item.status or '')|upper == 'N/A' %}bg-amber-500 text-white{% else %}bg-slate-100 text-slate-600{% endif %}">
+                                N/A
+                            </button>
+                            <button onclick="salvarItem({{ item.id }}, 'SIM')" class="rounded-xl px-4 py-2 text-sm font-bold {% if (item.status or '')|upper == 'SIM' %}bg-emerald-600 text-white{% else %}bg-slate-100 text-slate-600{% endif %}">
+                                OK
+                            </button>
+
+                            <div class="flex min-w-[220px] flex-col gap-2">
+                                <div class="flex gap-2">
+                                    <input id="qtd-apontada-{{ item.id }}" type="number" min="0" step="0.01" value="{{ resumo_empenho.qtd_apontada_input }}"
+                                           placeholder="Qtd apontada"
+                                           class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500">
+                                    <button onclick="salvarQuantidade({{ item.id }})" class="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white">
+                                        Salvar qtd
+                                    </button>
+                                </div>
+
+                                {% if permite_empenho %}
                                 <div class="flex gap-2">
                                     <input id="qtd-empenho-{{ item.id }}" type="number" min="0.01" step="0.01" placeholder="Qtd consumida"
                                            class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-cyan-500">
@@ -100,15 +122,15 @@
                                     </button>
                                 </div>
                                 {% if resumo_empenho.empenhos %}
-                                <div class="rounded-xl bg-slate-50 p-3 text-[11px] text-slate-600 space-y-1">
+                                <div class="space-y-1 rounded-xl bg-slate-50 p-3 text-[11px] text-slate-600">
                                     <div class="font-bold uppercase text-slate-500">Lancamentos</div>
                                     {% for emp in resumo_empenho.empenhos[-5:] %}
                                     <div>{{ emp.responsavel or "-" }} | {{ emp.qtd_empenhada_fmt }} | {{ emp.criado_em_fmt }}</div>
                                     {% endfor %}
                                 </div>
                                 {% endif %}
+                                {% endif %}
                             </div>
-                            {% endif %}
                         </div>
                     </div>
                 </div>
@@ -116,7 +138,7 @@
             </div>
 
             {% if bom_itens|length == 0 %}
-            <div class="text-center py-12 rounded-2xl border-2 border-dashed border-slate-200 text-slate-400 font-medium">
+            <div class="rounded-2xl border-2 border-dashed border-slate-200 py-12 text-center font-medium text-slate-400">
                 Nenhum item de B.O.M. cadastrado para este card.
             </div>
             {% endif %}
@@ -142,6 +164,25 @@
         setTimeout(() => window.location.reload(), 400);
     }
 
+    async function salvarQuantidade(itemId) {
+        const input = document.getElementById(`qtd-apontada-${itemId}`);
+        const quantidade = input ? input.value : '';
+        const response = await fetch('/bom/item-quantidade', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ item_id: itemId, quantidade: quantidade })
+        });
+        const data = await response.json();
+        if (!response.ok || data.status !== 'ok') {
+            document.getElementById('msg').textContent = data.detail || 'Erro ao salvar quantidade.';
+            document.getElementById('msg').className = 'text-sm font-bold text-rose-600';
+            return;
+        }
+        document.getElementById('msg').textContent = `Quantidade apontada: ${data.quantidade}`;
+        document.getElementById('msg').className = 'text-sm font-bold text-emerald-600';
+        setTimeout(() => window.location.reload(), 400);
+    }
+
     async function registrarEmpenho(itemId) {
         const input = document.getElementById(`qtd-empenho-${itemId}`);
         const quantidade = input ? input.value : '';
@@ -156,7 +197,7 @@
             document.getElementById('msg').className = 'text-sm font-bold text-rose-600';
             return;
         }
-        document.getElementById('msg').textContent = `Empenho registrado: ${data.quantidade}`;
+        document.getElementById('msg').textContent = `Empenho registrado: ${data.quantidade}. Total apontado: ${data.qtd_apontada}`;
         document.getElementById('msg').className = 'text-sm font-bold text-emerald-600';
         setTimeout(() => window.location.reload(), 400);
     }

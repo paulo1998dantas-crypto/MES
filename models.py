@@ -83,6 +83,7 @@ class BomItem(Base):
     item = Column(String)
     descricao = Column(String)
     qtd = Column(String)
+    qtd_apontada = Column(Float)
     status = Column(String, default="NAO")
     responsavel = Column(String)
     atualizado_em = Column(DateTime(timezone=True), default=lambda: datetime.datetime.now(LOCAL_TZ))

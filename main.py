@@ -73,6 +73,8 @@ def ensure_columns():
         add_column_if_missing(conn, "apontamentos", "localizacao", "VARCHAR")
         add_column_if_missing(conn, "apontamentos", "observacao", "VARCHAR")
 
+        add_column_if_missing(conn, "bom_itens", "qtd_apontada", "FLOAT")
+
         add_column_if_missing(conn, "empenhos", "qtd_empenhada", "FLOAT")
 
         hist_cols = column_names("historico")
@@ -570,13 +572,34 @@ def render_sequenciamento_page(
 ):
     grupos = []
     for posto_key, posto_cfg in POSTOS_TRABALHO.items():
+        cards = get_posto_cards(db, posto_key)
+        status_counts = {
+            "AGUARDANDO": 0,
+            "EM ANDAMENTO": 0,
+            "PARADO": 0,
+            "FINALIZADO": 0,
+        }
+        for card in cards:
+            status = str(card.get("status_operacao", "")).strip().upper()
+            status_counts.setdefault(status, 0)
+            status_counts[status] += 1
+
         grupos.append(
             {
                 "key": posto_key,
                 "label": posto_cfg["label"],
-                "cards": get_posto_cards(db, posto_key),
+                "cards": cards,
+                "cards_count": len(cards),
+                "modo": posto_cfg.get("modo", "operacao"),
+                "modo_label": "Checklist B.O.M." if posto_cfg.get("modo") == "checklist" else "Operacao",
+                "status_counts": status_counts,
             }
         )
+
+    total_cards = sum(grupo["cards_count"] for grupo in grupos)
+    postos_com_fila = sum(1 for grupo in grupos if grupo["cards_count"] > 0)
+    postos_vazios = len(grupos) - postos_com_fila
+
     return templates.TemplateResponse(
         request,
         "sequenciamento.html",
@@ -589,6 +612,12 @@ def render_sequenciamento_page(
             "erro": erro,
             "sucesso": sucesso,
             "form_data": form_data or {},
+            "resumo": {
+                "total_postos": len(grupos),
+                "postos_com_fila": postos_com_fila,
+                "postos_vazios": postos_vazios,
+                "total_cards": total_cards,
+            },
         },
         status_code=400 if erro else 200,
     )
@@ -652,6 +681,99 @@ def extract_docx_preview(caminho_arquivo: str):
     return {"paragraphs": paragraphs, "tables": tables, "available": True}
 
 
+def extract_docx_composition_items(caminho_arquivo: str):
+    if not caminho_arquivo or not Path(caminho_arquivo).exists() or DocxDocument is None:
+        return []
+
+    doc = DocxDocument(caminho_arquivo)
+    composition_table = None
+    for table in doc.tables:
+        if not table.rows:
+            continue
+        header_text = " ".join(safe_str(cell.text) for cell in table.rows[0].cells).upper()
+        if "COMPOSICAO" in normalize_lookup_key(header_text):
+            composition_table = table
+            break
+
+    if not composition_table or len(composition_table.rows) < 3:
+        return []
+
+    items = []
+    for row in composition_table.rows[2:]:
+        cells = [safe_str(cell.text) for cell in row.cells]
+        if len(cells) < 4:
+            continue
+        cod_item, item_nome, qtd, unidade = cells[:4]
+        if not cod_item and not item_nome:
+            continue
+        items.append(
+            {
+                "cod_item": cod_item,
+                "item": item_nome,
+                "descricao": f"Un.: {unidade}" if unidade else "",
+                "qtd": qtd,
+            }
+        )
+    return items
+
+
+def build_bom_match_key(cod_item: str, item: str, descricao: str):
+    codigo_key = normalize_lookup_key(cod_item)
+    if codigo_key:
+        return ("CODIGO", codigo_key)
+    return (
+        "TEXTO",
+        normalize_lookup_key(item),
+        normalize_lookup_key(descricao),
+    )
+
+
+def sync_bom_items_for_chassi(db: Session, tipo: str, chassi: str, rows):
+    tipo_key = str(tipo or "").strip().upper()
+    chassi_key = str(chassi or "").strip()
+    rows = rows or []
+
+    existing_items = get_bom_items(db, tipo_key, chassi_key)
+    existing_by_key = {}
+    for existing in existing_items:
+        key = build_bom_match_key(existing.cod_item, existing.item, existing.descricao)
+        existing_by_key.setdefault(key, []).append(existing)
+
+    kept_ids = set()
+    for row in rows:
+        key = build_bom_match_key(row.get("cod_item", ""), row.get("item", ""), row.get("descricao", ""))
+        current = None
+        candidates = existing_by_key.get(key) or []
+        if candidates:
+            current = candidates.pop(0)
+
+        if not current:
+            current = models.BomItem(
+                tipo=tipo_key,
+                chassi=chassi_key,
+                status="NAO",
+            )
+            db.add(current)
+            db.flush()
+
+        current.cod_item = row.get("cod_item", "")
+        current.item = row.get("item", "")
+        current.descricao = row.get("descricao", "")
+        current.qtd = row.get("qtd", "")
+        kept_ids.add(current.id)
+
+    obsolete_ids = [item.id for item in existing_items if item.id not in kept_ids]
+    if obsolete_ids:
+        db.query(models.Empenho).filter(
+            models.Empenho.bom_item_id.in_(obsolete_ids)
+        ).delete(synchronize_session=False)
+        db.query(models.BomItem).filter(
+            models.BomItem.id.in_(obsolete_ids)
+        ).delete(synchronize_session=False)
+
+    return len(rows)
+
+
 def get_bom_items(db: Session, tipo: str, chassi: str):
     return db.query(models.BomItem).filter(
         models.BomItem.tipo == str(tipo).strip().upper(),
@@ -679,7 +801,7 @@ def sync_stage_from_bom(db: Session, tipo: str, chassi: str, responsavel: str):
     apont = get_or_create_apontamento(db, chassi, posto_cfg["etapa"])
     status_anterior = str(apont.status or "").strip().upper()
     agora = datetime.datetime.now(LOCAL_TZ)
-    todos_ok = all(str(item.status or "").strip().upper() in ["SIM", "S", "OK"] for item in itens)
+    todos_ok = all(normalize_status_value(item.status) in ["SIM", "N/A"] for item in itens)
 
     if not apont.inicio:
         apont.inicio = agora
@@ -759,6 +881,22 @@ def format_quantity_value(value):
     return f"{value:.2f}".rstrip("0").rstrip(".").replace(".", ",")
 
 
+def format_quantity_input(value):
+    if value is None:
+        return ""
+    if abs(value - round(value)) < 1e-9:
+        return str(int(round(value)))
+    return f"{value:.2f}".rstrip("0").rstrip(".")
+
+
+def resolve_bom_item_pointed_quantity(item, total_lancado=0.0):
+    if item is None:
+        return float(total_lancado or 0.0)
+    if item.qtd_apontada is not None:
+        return float(item.qtd_apontada or 0.0)
+    return float(total_lancado or 0.0)
+
+
 def compute_consumption_status(qtd_prevista, qtd_consumida):
     if qtd_prevista is None:
         return "SEM_QTD_PREVISTA"
@@ -794,18 +932,24 @@ def build_bom_item_empenho_summary(bom_items, empenhos_por_item):
                 if empenho.criado_em
                 else "-"
             )
-        total_consumido = sum(float(emp.qtd_empenhada or 0) for emp in empenhos_item)
+        total_lancado = sum(float(emp.qtd_empenhada or 0) for emp in empenhos_item)
+        qtd_apontada = resolve_bom_item_pointed_quantity(item, total_lancado)
         qtd_prevista = parse_quantity_value(item.qtd)
-        saldo = None if qtd_prevista is None else qtd_prevista - total_consumido
+        saldo = None if qtd_prevista is None else qtd_prevista - qtd_apontada
         summary[item.id] = {
             "empenhos": empenhos_item,
-            "total_consumido": total_consumido,
-            "total_consumido_fmt": format_quantity_value(total_consumido),
+            "total_consumido": total_lancado,
+            "total_consumido_fmt": format_quantity_value(total_lancado),
+            "total_lancado": total_lancado,
+            "total_lancado_fmt": format_quantity_value(total_lancado),
             "qtd_prevista": qtd_prevista,
             "qtd_prevista_fmt": format_quantity_value(qtd_prevista),
+            "qtd_apontada": qtd_apontada,
+            "qtd_apontada_fmt": format_quantity_value(qtd_apontada),
+            "qtd_apontada_input": format_quantity_input(item.qtd_apontada),
             "saldo": saldo,
             "saldo_fmt": format_quantity_value(saldo),
-            "status_consumo": compute_consumption_status(qtd_prevista, total_consumido),
+            "status_consumo": compute_consumption_status(qtd_prevista, qtd_apontada),
         }
     return summary
 
@@ -819,6 +963,7 @@ def build_expedicao_export_rows(db: Session):
         models.BomItem.tipo == "EXPEDICAO",
         models.BomItem.chassi.in_(active_chassis),
     ).order_by(models.BomItem.chassi.asc(), models.BomItem.id.asc()).all()
+    itens_por_id = {item.id: item for item in itens}
     ordens_por_chassi = {
         ordem.chassi: ordem
         for ordem in db.query(models.OrdemServico).all()
@@ -855,7 +1000,7 @@ def build_expedicao_export_rows(db: Session):
         if safe_str(item.qtd):
             row["QTD_PREVISTA_ORIGINAL"].append(safe_str(item.qtd))
         row["ITEM_IDS"].append(item.id)
-        if str(item.status or "").strip().upper() not in ["SIM", "S", "OK"]:
+        if normalize_status_value(item.status) not in ["SIM", "N/A"]:
             row["STATUS_CHECKLIST"] = "PENDENTE"
         if safe_str(item.responsavel):
             row["RESPONSAVEL_CHECKLIST"].append(safe_str(item.responsavel))
@@ -881,11 +1026,15 @@ def build_expedicao_export_rows(db: Session):
 
     rows = []
     for row in grouped.values():
-        qtd_consumida = sum(total_por_item.get(item_id, 0.0) for item_id in row["ITEM_IDS"])
+        qtd_lancada = sum(total_por_item.get(item_id, 0.0) for item_id in row["ITEM_IDS"])
+        qtd_apontada = sum(
+            resolve_bom_item_pointed_quantity(itens_por_id.get(item_id), total_por_item.get(item_id, 0.0))
+            for item_id in row["ITEM_IDS"]
+        )
         qtd_prevista_total = row["QTD_PREVISTA_TOTAL"]
         has_prevista = any(parse_quantity_value(v) is not None for v in row["QTD_PREVISTA_ORIGINAL"])
         qtd_prevista_value = qtd_prevista_total if has_prevista else None
-        saldo = None if qtd_prevista_value is None else qtd_prevista_value - qtd_consumida
+        saldo = None if qtd_prevista_value is None else qtd_prevista_value - qtd_apontada
         rows.append(
             {
                 "CHASSI": row["CHASSI"],
@@ -894,9 +1043,11 @@ def build_expedicao_export_rows(db: Session):
                 "ITEM": row["ITEM"],
                 "DESCRICAO": row["DESCRICAO"],
                 "QTD_PREVISTA": format_quantity_value(qtd_prevista_value),
-                "QTD_CONSUMIDA": format_quantity_value(qtd_consumida),
+                "QTD_APONTADA": format_quantity_value(qtd_apontada),
+                "QTD_CONSUMIDA": format_quantity_value(qtd_apontada),
+                "QTD_LANCADA_HISTORICO": format_quantity_value(qtd_lancada),
                 "SALDO": format_quantity_value(saldo),
-                "STATUS_CONSUMO": compute_consumption_status(qtd_prevista_value, qtd_consumida),
+                "STATUS_CONSUMO": compute_consumption_status(qtd_prevista_value, qtd_apontada),
                 "STATUS_CHECKLIST": row["STATUS_CHECKLIST"],
                 "RESPONSAVEL_CHECKLIST": ", ".join(sorted(set(filter(None, row["RESPONSAVEL_CHECKLIST"])))),
                 "ATUALIZADO_EM": to_excel_dt(row["ULTIMA_ATUALIZACAO_CHECKLIST"]),
@@ -2080,6 +2231,7 @@ async def exportar_bom_preparacao(request: Request, db: Session = Depends(databa
         models.BomItem.tipo == "PREPARACAO",
         models.BomItem.chassi.in_(active_chassis),
     ).order_by(models.BomItem.chassi.asc(), models.BomItem.id.asc()).all() if active_chassis else []
+    resumo_por_item = build_bom_item_empenho_summary(itens, {})
     df = pd.DataFrame(
         [
             {
@@ -2088,6 +2240,9 @@ async def exportar_bom_preparacao(request: Request, db: Session = Depends(databa
                 "ITEM": item.item,
                 "DESCRICAO": item.descricao,
                 "QTD": item.qtd,
+                "QTD_APONTADA": resumo_por_item.get(item.id, {}).get("qtd_apontada_fmt"),
+                "SALDO": resumo_por_item.get(item.id, {}).get("saldo_fmt"),
+                "STATUS_CONSUMO": resumo_por_item.get(item.id, {}).get("status_consumo"),
                 "STATUS": item.status,
                 "RESPONSAVEL": item.responsavel,
                 "ATUALIZADO_EM": to_excel_dt(item.atualizado_em),
@@ -2152,6 +2307,15 @@ async def exportar_empenhos(request: Request, db: Session = Depends(database.get
                     ),
                     {},
                 ).get("QTD_CONSUMIDA"),
+                "QTD_APONTADA_ITEM": consolidated_map.get(
+                    (
+                        safe_str(item.chassi),
+                        safe_str(item.cod_item),
+                        safe_str(item.item),
+                        safe_str(item.descricao),
+                    ),
+                    {},
+                ).get("QTD_APONTADA"),
                 "QTD_PREVISTA_ITEM": consolidated_map.get(
                     (
                         safe_str(item.chassi),
@@ -2499,7 +2663,7 @@ async def bom_item_status(request: Request, data: dict = Body(...), db: Session 
 
     item_id = data.get("item_id")
     status = normalize_lookup_key(data.get("status"))
-    if status not in ["SIM", "NAO"]:
+    if status not in ["SIM", "NAO", "N_A"]:
         return {"status": "erro", "detail": "Status inválido"}
 
     item = get_bom_item(db, item_id)
@@ -2508,12 +2672,45 @@ async def bom_item_status(request: Request, data: dict = Body(...), db: Session 
     if not can_access_chassi(request, db, item.chassi):
         return {"status": "erro", "detail": "Card não permitido para este usuário"}
 
-    item.status = status
+    item.status = normalize_status_value(status)
     item.responsavel = user.get("nome", "")
     item.atualizado_em = datetime.datetime.now(LOCAL_TZ)
     sync_stage_from_bom(db, item.tipo, item.chassi, user.get("nome", ""))
     db.commit()
     return {"status": "ok"}
+
+
+@app.post("/bom/item-quantidade")
+async def bom_item_quantidade(request: Request, data: dict = Body(...), db: Session = Depends(database.get_db)):
+    user = require_login(request)
+    if not user:
+        return {"status": "erro", "detail": "Login necessario"}
+    if is_management_user(request):
+        return {"status": "erro", "detail": "Acao disponivel apenas na visao operacional"}
+    if not user:
+        return {"status": "erro", "detail": "Login necessÃ¡rio"}
+    if is_management_user(request):
+        return {"status": "erro", "detail": "AÃ§Ã£o disponÃ­vel apenas na visÃ£o operacional"}
+
+    item = get_bom_item(db, data.get("item_id"))
+    if not item:
+        return {"status": "erro", "detail": "Item nao encontrado"}
+    if not can_access_chassi(request, db, item.chassi):
+        return {"status": "erro", "detail": "Card nao permitido para este usuario"}
+    if not item:
+        return {"status": "erro", "detail": "Item nÃ£o encontrado"}
+    if not can_access_chassi(request, db, item.chassi):
+        return {"status": "erro", "detail": "Card nÃ£o permitido para este usuÃ¡rio"}
+
+    quantidade = parse_quantity_value(data.get("quantidade"))
+    if quantidade is None or quantidade < 0:
+        return {"status": "erro", "detail": "Informe uma quantidade valida para apontamento"}
+
+    item.qtd_apontada = quantidade
+    item.responsavel = user.get("nome", "")
+    item.atualizado_em = datetime.datetime.now(LOCAL_TZ)
+    db.commit()
+    return {"status": "ok", "quantidade": format_quantity_value(quantidade)}
 
 
 @app.post("/bom/empenho")
@@ -2536,6 +2733,13 @@ async def bom_empenho(request: Request, data: dict = Body(...), db: Session = De
     if qtd_empenhada is None or qtd_empenhada <= 0:
         return {"status": "erro", "detail": "Informe uma quantidade valida para o empenho"}
 
+    total_lancado_atual = db.query(func.coalesce(func.sum(models.Empenho.qtd_empenhada), 0.0)).filter(
+        models.Empenho.bom_item_id == item.id
+    ).scalar() or 0.0
+    item.qtd_apontada = resolve_bom_item_pointed_quantity(item, total_lancado_atual) + qtd_empenhada
+    item.responsavel = user.get("nome", "")
+    item.atualizado_em = datetime.datetime.now(LOCAL_TZ)
+
     db.add(
         models.Empenho(
             bom_item_id=item.id,
@@ -2549,7 +2753,11 @@ async def bom_empenho(request: Request, data: dict = Body(...), db: Session = De
         )
     )
     db.commit()
-    return {"status": "ok", "quantidade": format_quantity_value(qtd_empenhada)}
+    return {
+        "status": "ok",
+        "quantidade": format_quantity_value(qtd_empenhada),
+        "qtd_apontada": format_quantity_value(item.qtd_apontada),
+    }
 
 
 @app.get("/os/{chassi}", response_class=HTMLResponse)
@@ -2705,8 +2913,26 @@ async def sequenciamento_os_upload(
                 caminho_arquivo=str(destino),
             )
         )
+
+    composition_rows = extract_docx_composition_items(str(destino))
+    if composition_rows:
+        prep_count = sync_bom_items_for_chassi(db, "PREPARACAO", chassi_key, composition_rows)
+        exp_count = sync_bom_items_for_chassi(db, "EXPEDICAO", chassi_key, composition_rows)
+        sync_stage_from_bom(db, "PREPARACAO", chassi_key, "Sistema")
+        sync_stage_from_bom(db, "EXPEDICAO", chassi_key, "Sistema")
+        db.commit()
+        return render_sequenciamento_page(
+            request,
+            db,
+            sucesso=f"O.S. enviada com sucesso. Checklist atualizado com {prep_count} item(ns) para Preparacao e {exp_count} para Expedicao.",
+        )
+
     db.commit()
-    return render_sequenciamento_page(request, db, sucesso="O.S. enviada com sucesso.")
+    return render_sequenciamento_page(
+        request,
+        db,
+        sucesso="O.S. enviada com sucesso. Nenhuma tabela de composicao valida foi encontrada para gerar o checklist.",
+    )
 
 
 @app.post("/sequenciamento/bom-upload", response_class=HTMLResponse)
